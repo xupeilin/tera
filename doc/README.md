@@ -19,6 +19,8 @@
 
 [tera实现之master、ts、client的交互](https://github.com/BaiduPS/tera/blob/master/doc/master-ts-client-interactive.md)
 
+[tera中的leveldb](https://github.com/BaiduPS/tera/blob/master/doc/leveldb_in_tera.md)
+
 ## TodoList
 1. Master的设计与实现（职责、功能、每个功能怎么实现的、为什么这么实现、还有哪些遗留问题）
 1. Tabletserver设计与实现
