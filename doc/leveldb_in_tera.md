@@ -9,11 +9,11 @@ Leveldb在tera中负责表格分片的存储，一个tabletnode中可能管理�
 
 ## 1. 类bigtable数据模型支持
 
-[todo]
+[Tera中BigTable模型的实现](https://github.com/BaiduPS/tera/blob/master/doc/bigtable.md)
 
 ## 2. 表格分片分裂与合并
 
-[todo]
+[Tera中表格分片的分裂与合并实现](https://github.com/BaiduPS/tera/blob/master/doc/split_merge.md)
 
 ## 3. 多存储介质支持
 
