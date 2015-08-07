@@ -47,5 +47,7 @@ sh ./build.sh
 
 [命令行工具使用手册](https://github.com/baidu/tera/blob/master/doc/teracli.md)
 
+[搭建分布式tera](https://github.com/baidu/tera/blob/master/doc/how_to_deploy_tera.md)
+
 #反馈与技术支持
 tera_dev@baidu.com
