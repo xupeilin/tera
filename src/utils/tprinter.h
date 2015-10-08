@@ -22,13 +22,18 @@ class TPrinter {
 public:
     struct PrintOpt {
     public:
-        bool print_head; // if print table header
-
-        // >0 for positive order, <0 for reverse order, 0 for not sort
+        // if print table header
+        bool print_head;
+        // >0 for ascending order, <0 for decending order
         int  sort_dir;
-        int  sort_col;   // select column num for sorting
+        // select column num for sorting
+        int  sort_col_num;
+        // select column name for sorting
+        string sort_col_name;
 
-        PrintOpt() : print_head(true), sort_dir(0) {}
+        PrintOpt()
+            : print_head(true), sort_dir(0),
+              sort_col_num(0), sort_col_name("") {}
     };
 
     TPrinter();
@@ -67,27 +72,22 @@ private:
         Cell (const string& v, CellType t) { value.s = new string(v); type = t; }
         Cell (const Cell& ref) { *this = ref; }
         ~Cell () { if (type == STRING) delete value.s; }
-        Cell& operator=(const Cell& ref) {
-            type = ref.type;
-            if (type == STRING && this != &ref) {
-                value.s = new string(*ref.value.s);
-            } else {
-                value = ref.value;
-            }
-            return *this;
-        }
+        Cell& operator=(const Cell& ref);
     };
     typedef std::vector<Cell> Line;
 
     // column format: "name<int[,unit]>"
     // e.g. "name<string>", "money<int,yuan>", "speed<int_1024,B>"
-    bool ParseColType(const string& item, string* name, CellType* type);
+    bool ParseColType(const string& item, string* name,
+                      CellType* type, string* unit = NULL);
     void FormatOneLine(Line& ori, std::vector<string>* dst);
     static string NumToStr(const double num);
 
 private:
     int cols_;
-    std::vector<std::pair<string, CellType> > head_;
+    std::vector<string> head_;
+    std::vector<CellType> type_;
+    std::vector<string> unit_;
     std::vector<Line> body_;
     std::vector<size_t> col_width_;
 };

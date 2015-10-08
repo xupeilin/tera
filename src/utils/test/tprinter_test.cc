@@ -13,19 +13,26 @@ namespace tera {
 class TPrinterTest : public ::testing::Test, public TPrinter {
 public:
     TPrinterTest()
-        : TPrinter(3, "No.", "year<int>", "avg<double>") {
+        : TPrinter(3, "No.", "year<int,Y>", "avg<double>") {
     }
     ~TPrinterTest() {}
 };
 
 TEST_F(TPrinterTest, ParseColType) {
-    string item, name;
+    string item, name, unit;
     CellType type;
-    item = "hello<int>";
 
+    item = "hello<int>";
     EXPECT_TRUE(TPrinter::ParseColType(item, &name, &type));
     VLOG(5) << name << " " << type;
     EXPECT_EQ(name, "hello");
+    EXPECT_EQ(unit, "");
+    EXPECT_EQ(type, INT);
+
+    item = "speed<int,B>";
+    EXPECT_TRUE(TPrinter::ParseColType(item, &name, &type, &unit));
+    EXPECT_EQ(name, "speed");
+    EXPECT_EQ(unit, "B");
     EXPECT_EQ(type, INT);
 
     item = "hello";
@@ -51,6 +58,7 @@ TEST_F(TPrinterTest, NumToStr) {
 TEST_F(TPrinterTest, AddRow) {
     // test varargs row
     ASSERT_TRUE(AddRow(3, "1", 2013, 1.234));
+    ASSERT_EQ(1, (int)body_.size());
     ASSERT_TRUE(AddRow(3, "2", 2014, 500.0));
     ASSERT_EQ(2, (int)body_.size());
     ASSERT_EQ(3, (int)body_[0].size());
@@ -85,9 +93,9 @@ TEST_F(TPrinterTest, AddRow) {
 
 TEST_F(TPrinterTest, New) {
     ASSERT_EQ(3, (int)head_.size());
-    ASSERT_EQ(STRING, head_[0].second);
-    ASSERT_EQ(INT, head_[1].second);
-    ASSERT_EQ(DOUBLE, head_[2].second);
+    ASSERT_EQ(STRING, type_[0]);
+    ASSERT_EQ(INT, type_[1]);
+    ASSERT_EQ(DOUBLE, type_[2]);
 }
 
 TEST_F(TPrinterTest, ToString) {

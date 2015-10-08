@@ -25,13 +25,16 @@ TPrinter::TPrinter(int cols, ...) : cols_(cols), col_width_(cols_) {
     va_start(args, cols);
     for (int i = 0; i < cols; ++i) {
         string item = va_arg(args, char*);
-        string name;
+        string name, unit;
         CellType type;
-        if (!ParseColType(item, &name, &type)) {
+        if (!ParseColType(item, &name, &type, &unit)) {
             name = item;
             type = STRING;
+            unit = "";
         }
-        head_.push_back(std::make_pair(name, type));
+        head_.push_back(name);
+        type_.push_back(type);
+        unit_.push_back(unit);
         col_width_[i] = name.size();
     }
     va_end(args);
@@ -48,7 +51,7 @@ bool TPrinter::AddRow(int cols, ...) {
     va_list args;
     va_start(args, cols);
     for (int i = 0; i < cols; ++i) {
-        switch (head_[i].second) {
+        switch (type_[i]) {
         case INT:
             line.push_back(Cell((int64_t)va_arg(args, int64_t), INT));
             break;
@@ -110,7 +113,7 @@ string TPrinter::ToString(const PrintOpt& opt) {
             ostr << "  " << std::setfill(' ')
                 << std::setw(col_width_[i])
                 << std::setiosflags(std::ios::left)
-                << head_[i].first;
+                << head_[i];
         }
         ostr << std::endl;
         for (int i = 0; i < line_len + 2; ++i) {
@@ -138,19 +141,23 @@ void TPrinter::Reset(int cols, ...) {
     cols_ = cols;
     col_width_.resize(cols_, 0);
     head_.clear();
+    type_.clear();
     body_.clear();
 
     va_list args;
     va_start(args, cols);
     for (int i = 0; i < cols; ++i) {
         string item = va_arg(args, char*);
-        string name;
+        string name, unit;
         CellType type;
-        if (!ParseColType(item, &name, &type)) {
+        if (!ParseColType(item, &name, &type, &unit)) {
             name = item;
             type = STRING;
+            unit = "";
         }
-        head_.push_back(std::make_pair(name, type));
+        head_.push_back(name);
+        type_.push_back(type);
+        unit_.push_back(unit);
         col_width_[i] = name.size();
     }
     va_end(args);
@@ -161,15 +168,20 @@ void TPrinter::Reset(const std::vector<string>& row) {
     cols_ = row.size();
     col_width_.resize(cols_, 0);
     head_.clear();
+    type_.clear();
+    unit_.clear();
     body_.clear();
 
     for (int i = 0; i < cols_; ++i) {
-        head_.push_back(std::make_pair(row[i], STRING));
+        head_.push_back(row[i]);
+        type_.push_back(STRING);
+        unit_.push_back("");
         col_width_[i] = row[i].size();
     }
 }
 
-bool TPrinter::ParseColType(const string& item, string* name, CellType* type) {
+bool TPrinter::ParseColType(const string& item, string* name,
+                            CellType* type, string* unit) {
     string::size_type pos1;
     pos1 = item.find('<');
     if (pos1 == string::npos) {
@@ -178,7 +190,17 @@ bool TPrinter::ParseColType(const string& item, string* name, CellType* type) {
     if (item[item.size() - 1] != '>') {
         return false;
     }
-    string type_str = item.substr(pos1 + 1, item.size() - pos1 - 2);
+    string type_unit = item.substr(pos1 + 1, item.size() - pos1 - 2);
+    string::size_type pos2 = type_unit.find(',');
+    string type_str, unit_str;
+    if (pos2 == string::npos) {
+        type_str = type_unit;
+        unit_str = "";
+    } else {
+        type_str = type_unit.substr(0, pos2);
+        unit_str = type_unit.substr(pos2 + 1);
+    }
+
     if (type_str == "int") {
         *type = INT;
     } else if (type_str == "double") {
@@ -188,7 +210,13 @@ bool TPrinter::ParseColType(const string& item, string* name, CellType* type) {
     } else {
         return false;
     }
-    *name = item.substr(0, pos1);
+
+    if (name) {
+        *name = item.substr(0, pos1);
+    }
+    if (unit) {
+        *unit = unit_str;
+    }
     return true;
 }
 
@@ -198,6 +226,9 @@ void TPrinter::FormatOneLine(Line& ori, std::vector<string>* dst) {
     }
     for (size_t i = 0; i < ori.size(); ++i) {
         string str = ori[i].ToString();
+        if (ori[i].type == type_[i]) {
+            str.append(unit_[i]);
+        }
         if (col_width_[i] < str.size()) {
             col_width_[i] = str.size();
         }
@@ -256,5 +287,15 @@ string TPrinter::Cell::ToString() {
     default:
         abort();
     }
+}
+
+TPrinter::Cell& TPrinter::Cell::operator=(const TPrinter::Cell& ref) {
+    type = ref.type;
+    if (type == STRING && this != &ref) {
+        value.s = new string(*ref.value.s);
+    } else {
+        value = ref.value;
+    }
+    return *this;
 }
 } // namespace tera
