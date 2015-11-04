@@ -1105,7 +1105,9 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
 
   // don't check manifest size because some dfs (eg. hdfs)
   // may return 0 even if the actual size is not 0
-  if (!s.ok() || !env_->FileExists(*dscname)) {
+  uint64_t fsize = 0;
+  env_->GetFileSize(*dscname, &fsize);
+  if (!s.ok() || !env_->FileExists(*dscname) || fsize == 0) {
     // manifest is not ready, now recover the backup manifest
     std::vector<std::string> files;
     env_->GetChildren(pdbname, &files);
@@ -1126,7 +1128,12 @@ Status VersionSet::ReadCurrentFile(uint64_t tablet, std::string* dscname ) {
     }
     // select the largest manifest number
     std::set<std::string>::reverse_iterator it = manifest_set.rbegin();
-    *dscname = pdbname + "/" + *it;
+    std::string dname;
+    do {
+        dname = pdbname + "/" + *it;
+        it++;
+    } while (*dscname == dname);
+    *dscname = dname;
     Log(options_->info_log, "[%s] use backup manifest: %s.",
         dbname_.c_str(), dscname->c_str());
     return Status::OK();
