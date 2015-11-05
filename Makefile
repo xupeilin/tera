@@ -30,7 +30,9 @@ VERSION_SRC := src/version.cc
 OTHER_SRC := $(wildcard src/zk/*.cc) $(wildcard src/utils/*.cc) $(VERSION_SRC) \
 	     src/tera_flags.cc
 COMMON_SRC := $(wildcard src/common/base/*.cc) $(wildcard src/common/net/*.cc) \
-              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc)
+              $(wildcard src/common/file/*.cc) $(wildcard src/common/file/recordio/*.cc) \
+              $(wildcard src/common/log/*.cc)
+
 SERVER_SRC := src/tera_main.cc src/tera_entry.cc
 CLIENT_SRC := src/teracli_main.cc
 MONITOR_SRC := src/monitor/teramo_main.cc
