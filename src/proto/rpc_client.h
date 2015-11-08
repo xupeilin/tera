@@ -5,10 +5,10 @@
 #ifndef TERA_RPC_CLIENT_ASYNC_H_
 #define TERA_RPC_CLIENT_ASYNC_H_
 
+#include <iostream>
 #include <string>
 
 #include <boost/bind.hpp>
-#include <glog/logging.h>
 #include <sofa/pbrpc/pbrpc.h>
 
 #include "common/base/scoped_ptr.h"
@@ -56,7 +56,7 @@ public:
         m_rpc_client.ResetOptions(m_rpc_client_options);
 
         sofa::pbrpc::RpcClientOptions new_options = m_rpc_client.GetOptions();
-        LOG(INFO) << "set rpc option: ("
+        std::cerr << "set rpc option: ("
             << "max_inflow: " << new_options.max_throughput_in
             << " MB/s, max_outflow: " << new_options.max_throughput_out
             << " MB/s, max_pending_buffer_size: " << new_options.max_pending_buffer_size
@@ -113,7 +113,7 @@ protected:
         /*
         IpAddress ip_address(server_addr);
         if (!ip_address.IsValid()) {
-            LOG(ERROR) << "invalid address: " << server_addr;
+        std::cerr << "invalid address: " << server_addr << std::endl;
             return;
         }
         */

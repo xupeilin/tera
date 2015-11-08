@@ -12,7 +12,6 @@
 #include <sstream>
 
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
@@ -192,22 +191,21 @@ int32_t CreateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::vector<std::string> delimiters;
     std::string schema = argv[2];
     if (!ParseTableSchema(schema, &table_desc)) {
-        LOG(ERROR) << "fail to parse input table schema.";
+        std::cerr << "fail to parse input table schema." << std::endl;
         return -1;
     }
     if (argc == 4) {
         // have tablet delimiters
         if (!ParseDelimiterFile(argv[3], &delimiters)) {
-            LOG(ERROR) << "fail to parse delimiter file.";
+            std::cerr << "fail to parse delimiter file." << std::endl;
             return -1;
         }
     } else if (argc > 4) {
-        LOG(ERROR) << "too many args: " << argc;
+        std::cerr << "too many args: " << argc << std::endl;
         return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
-        LOG(ERROR) << "fail to create table, "
-            << strerr(*err);
+        std::cerr << "fail to create table, " << strerr(*err) << std::endl;
         return -1;
     }
     ShowTableDescriptor(table_desc);
@@ -222,7 +220,7 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
 
     TableDescriptor table_desc;
     if (!ParseTableSchemaFile(argv[2], &table_desc)) {
-        LOG(ERROR) << "fail to parse input table schema.";
+        std::cerr << "fail to parse input table schema." << std::endl;
         return -1;
     }
 
@@ -230,16 +228,15 @@ int32_t CreateByFileOp(Client* client, int32_t argc, char** argv, ErrorCode* err
     if (argc == 4) {
         // have tablet delimiters
         if (!ParseDelimiterFile(argv[3], &delimiters)) {
-            LOG(ERROR) << "fail to parse delimiter file.";
+            std::cerr << "fail to parse delimiter file." << std::endl;
             return -1;
         }
     } else if (argc > 4) {
-        LOG(ERROR) << "too many args: " << argc;
+        std::cerr << "too many args: " << argc << std::endl;
         return -1;
     }
     if (!client->CreateTable(table_desc, delimiters, err)) {
-        LOG(ERROR) << "fail to create table, "
-            << strerr(*err);
+        std::cerr << "fail to create table, " << strerr(*err) << std::endl;
         return -1;
     }
     ShowTableDescriptor(table_desc);
@@ -254,32 +251,31 @@ int32_t UpdateOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string schema = argv[2];
     PropTree schema_tree;
     if (!schema_tree.ParseFromString(schema)) {
-        LOG(ERROR) << "[update] invalid schema: " << schema;
-        LOG(ERROR) << "[update] state: " << schema_tree.State();
+        std::cerr << "[update] invalid schema: " << schema << std::endl;
+        std::cerr << "[update] state: " << schema_tree.State() << std::endl;
         return -1;
     }
     std::string tablename = schema_tree.GetRootNode()->name_;
     TableDescriptor* table_desc = client->GetTableDescriptor(tablename, err);
     if (table_desc == NULL) {
-        LOG(ERROR) << "[update] can't get the TableDescriptor of table: " << tablename;
+        std::cerr << "[update] can't get the TableDescriptor of table: " << tablename << std::endl;
         return -1;
     }
 
     // if try to update lg or cf, need to disable table
     bool is_update_lg_cf = false;
     if (!UpdateTableDescriptor(schema_tree, table_desc, &is_update_lg_cf )) {
-        LOG(ERROR) << "[update] update failed";
+        std::cerr << "[update] update failed" << std::endl;
         return -1;
     }
 
     if (is_update_lg_cf && client->IsTableEnabled(table_desc->TableName(), err)) {
-        LOG(ERROR) << "[update] table is enabled, disable it first: " << table_desc->TableName();
-        return -1;
+        std::cerr << "[update] table is enabled, disable it first: " << table_desc->TableName() << std::endl;
+        //return -1;
     }
 
     if (!client->UpdateTable(*table_desc, err)) {
-        LOG(ERROR) << "[update] fail to update table, "
-            << strerr(*err);
+        std::cerr << "[update] fail to update table, " << strerr(*err) << std::endl;
         return -1;
     }
     ShowTableDescriptor(*table_desc);
@@ -295,7 +291,7 @@ int32_t DropOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DeleteTable(tablename, err)) {
-        LOG(ERROR) << "fail to delete table, " << err->GetReason();
+        std::cerr << "fail to delete table, " << err->GetReason() << std::endl;
         return -1;
     }
     return 0;
@@ -309,7 +305,7 @@ int32_t EnableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->EnableTable(tablename, err)) {
-        LOG(ERROR) << "fail to enable table";
+        std::cerr << "fail to enable table" << std::endl;
         return -1;
     }
     return 0;
@@ -323,7 +319,7 @@ int32_t DisableOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     std::string tablename = argv[2];
     if (!client->DisableTable(tablename, err)) {
-        LOG(ERROR) << "fail to disable table";
+        std::cerr << "fail to disable table" << std::endl;
         return -1;
     }
     return 0;
@@ -342,7 +338,7 @@ void ParseCfQualifier(const std::string& input, std::string* columnfamily, std::
 
 int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -350,7 +346,7 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -367,11 +363,11 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     int64_t value_int;
     if (!StringToNumber(value.c_str(), &value_int)) {
-       LOG(ERROR) << "invalid Integer number Got: " << value;
+       std::cerr << "invalid Integer number Got: " << value << std::endl;
        return -1;
     }
     if (!table->Put(rowkey, columnfamily, qualifier, value_int, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
+        std::cerr << "fail to put record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -380,7 +376,7 @@ int32_t PutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -388,7 +384,7 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -405,13 +401,13 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
     int64_t counter;
     if (!StringToNumber(value.c_str(), &counter)) {
-       LOG(ERROR) << "invalid Integer number Got: " << value;
+       std::cerr << "invalid Integer number Got: " << value << std::endl;
        return -1;
     }
 
     std::string s_counter = tera::CounterCoding::EncodeCounter(counter);
     if (!table->Put(rowkey, columnfamily, qualifier, s_counter, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
+        std::cerr << "fail to put record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -420,7 +416,7 @@ int32_t PutCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
 int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -428,7 +424,7 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -444,7 +440,7 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         value = argv[5];
     }
     if (!table->Put(rowkey, columnfamily, qualifier, value, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
+        std::cerr << "fail to put record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -453,7 +449,7 @@ int32_t PutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 6 && argc != 7) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -461,7 +457,7 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -480,7 +476,7 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ttl = atoi(argv[6]);
     }
     if (!table->Put(rowkey, columnfamily, qualifier, value, ttl, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
+        std::cerr << "fail to put record to table: " << tablename << std::endl;
         return -1;
     }
     return 0;
@@ -488,7 +484,7 @@ int32_t PutTTLOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -496,7 +492,7 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -512,7 +508,7 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         value = argv[5];
     }
     if (!table->Append(rowkey, columnfamily, qualifier, value, err)) {
-        LOG(ERROR) << "fail to append record to table: " << tablename;
+        std::cerr << "fail to append record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -521,7 +517,7 @@ int32_t AppendOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -529,7 +525,7 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -545,7 +541,7 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
         value = argv[5];
     }
     if (!table->PutIfAbsent(rowkey, columnfamily, qualifier, value, err)) {
-        LOG(ERROR) << "fail to put record to table: " << tablename;
+        std::cerr << "fail to put record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -554,7 +550,7 @@ int32_t PutIfAbsentOp(Client* client, int32_t argc, char** argv, ErrorCode* err)
 
 int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
+        std::cerr<< "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -562,7 +558,7 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -579,11 +575,11 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     int64_t delta;
     if (!StringToNumber(value.c_str(), &delta)) {
-        LOG(ERROR) << "invalid Integer number Got: " << value;
+        std::cerr << "invalid Integer number Got: " << value << std::endl;
         return -1;
     }
     if (!table->Add(rowkey, columnfamily, qualifier, delta, err)) {
-        LOG(ERROR) << "fail to add record to table: " << tablename;
+        std::cerr << "fail to add record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -592,7 +588,7 @@ int32_t AddOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR)<< "args number error: " << argc << ", need 5 | 6.";
+        std::cerr<< "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -600,7 +596,7 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -617,11 +613,11 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     int64_t delta;
     if (!StringToNumber(value.c_str(), &delta)) {
-        LOG(ERROR) << "invalid Integer number Got: " << value;
+        std::cerr << "invalid Integer number Got: " << value << std::endl;
         return -1;
     }
     if (!table->AddInt64(rowkey, columnfamily, qualifier, delta, err)) {
-        LOG(ERROR) << "fail to add record to table: " << tablename;
+        std::cerr << "fail to add record to table: " << tablename << std::endl;
         return -1;
     }
     delete table;
@@ -630,7 +626,7 @@ int32_t AddInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -638,7 +634,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -653,7 +649,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
+        std::cerr << "fail to get record from table: " << tablename << std::endl;
         return -1;
     }
 
@@ -664,7 +660,7 @@ int32_t GetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -672,7 +668,7 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -687,7 +683,7 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
 
     if (!table->Get(rowkey, columnfamily, qualifier, &value, err, FLAGS_snapshot)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
+        std::cerr << "fail to get record from table: " << tablename << std::endl;
         return -1;
     }
 
@@ -698,7 +694,7 @@ int32_t GetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -706,7 +702,7 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -721,14 +717,14 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
     }
 
     if (!table->Get(rowkey, columnfamily, qualifier, &value, err)) {
-        LOG(ERROR) << "fail to get record from table: " << tablename;
+        std::cerr << "fail to get record from table: " << tablename << std::endl;
         return -1;
     }
 
     int64_t counter = 0;
     bool ret = tera::CounterCoding::DecodeCounter(value, &counter);
     if (!ret) {
-        LOG(ERROR) << "invalid counter read, fail to parse";
+        std::cerr << "invalid counter read, fail to parse" << std::endl;
     } else {
         std::cout << counter << std::endl;
     }
@@ -739,7 +735,7 @@ int32_t GetCounterOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
 int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
+        std::cerr << "args number error: " << argc << ", need 4 | 5." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -748,7 +744,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string rowkey = argv[3];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -776,7 +772,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             }
         }
     } else {
-        LOG(FATAL) << "should not run here.";
+        abort();
     }
     table->ApplyMutation(mutation);
 
@@ -786,7 +782,7 @@ int32_t DeleteOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
 int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 5 && argc != 6) {
-        LOG(ERROR) << "args number error: " << argc << ", need 5 | 6.";
+        std::cerr << "args number error: " << argc << ", need 5 | 6." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -795,7 +791,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -812,7 +808,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         // scan all cells
     } else if (argc == 6) {
         if (!ParseScanSchema(argv[5], &desc)) {
-            LOG(ERROR) << "fail to parse scan schema: " << argv[5];
+            std::cerr << "fail to parse scan schema: " << argv[5] << std::endl;
             return -1;
         }
     }
@@ -822,7 +818,7 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     desc.SetSnapshot(FLAGS_snapshot);
     if ((result_stream = table->Scan(desc, err)) == NULL) {
-        LOG(ERROR) << "fail to scan records from table: " << tablename;
+        std::cerr << "fail to scan records from table: " << tablename << std::endl;
         return -1;
     }
     g_start_time = time(NULL);
@@ -842,20 +838,24 @@ int32_t ScanOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         if (g_cur_batch_num >= FLAGS_tera_client_batch_put_num) {
             int32_t time_cur=time(NULL);
             uint32_t time_used = time_cur - g_start_time;
-            LOG(INFO) << "Scaning " << g_key_num << " keys " << g_key_num/(time_used?time_used:1)
-                   << " keys/S " << g_total_size/1024.0/1024/(time_used?time_used:1) << " MB/S ";
+            std::cout << "Scaning " << g_key_num << " keys "
+                << g_key_num/(time_used?time_used:1) << " keys/S "
+                << g_total_size/1024.0/1024/(time_used?time_used:1)
+                << " MB/S " << std::endl;
             g_cur_batch_num = 0;
             g_last_time = time_cur;
         }
     }
     if (err->GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail to finish scan: " << err->GetReason();
+        std::cerr << "fail to finish scan: " << err->GetReason() << std::endl;
         return -1;
     }
     g_end_time = time(NULL);
     g_used_time = g_end_time - g_start_time;
-    LOG(INFO) << "Scan done " << g_key_num << " keys " << g_key_num/(g_used_time?g_used_time:1)
-            <<" keys/S " << g_total_size/1024.0/1024/(g_used_time?g_used_time:1) << " MB/S ";
+    std::cout << "Scan done " << g_key_num << " keys "
+        << g_key_num/(g_used_time?g_used_time:1) <<" keys/S "
+        << g_total_size/1024.0/1024/(g_used_time?g_used_time:1)
+        << " MB/S " << std::endl;
     delete table;
     return 0;
 }
@@ -949,7 +949,7 @@ int32_t ShowAllTables(Client* client, bool is_x, bool show_all, ErrorCode* err) 
     TabletMetaList tablet_list;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
     if (!client_impl->ShowTablesInfo(&table_list, &tablet_list, err)) {
-        LOG(ERROR) << "fail to get meta data from tera.";
+        std::cerr << "fail to get meta data from tera." << std::endl;
         return -1;
     }
 
@@ -1084,7 +1084,7 @@ int32_t ShowSingleTable(Client* client, const string& table_name,
 
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
     if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
-        LOG(ERROR) << "table not exist: " << table_name;
+        std::cerr << "table not exist: " << table_name << std::endl;
         return -1;
     }
 
@@ -1102,7 +1102,7 @@ int32_t ShowSingleTabletNodeInfo(Client* client, const string& addr,
     TabletMetaList tablet_list;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
     if (!client_impl->ShowTabletNodesInfo(addr, &info, &tablet_list, err)) {
-        LOG(ERROR) << "fail to show tabletnode: " << addr;
+        std::cerr << "fail to show tabletnode: " << addr << std::endl;
         return -1;
     }
 
@@ -1172,7 +1172,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
     std::vector<TabletNodeInfo> infos;
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
     if (!client_impl->ShowTabletNodesInfo(&infos, err)) {
-        LOG(ERROR) << "fail to get meta data from tera.";
+        std::cerr << "fail to get meta data from tera." << std::endl;
         return -1;
     }
 
@@ -1246,7 +1246,7 @@ int32_t ShowTabletNodesInfo(Client* client, bool is_x, ErrorCode* err) {
 
 int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
-        LOG(ERROR) << "args number error: " << argc << ", need >2.";
+        std::cerr << "args number error: " << argc << ", need >2." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1264,7 +1264,7 @@ int32_t ShowTabletNodesOp(Client* client, int32_t argc, char** argv, ErrorCode* 
 
 int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 2) {
-        LOG(ERROR) << "args number error: " << argc << ", need >2.";
+        std::cerr << "args number error: " << argc << ", need >2." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1277,14 +1277,14 @@ int32_t ShowOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         ret_val = ShowAllTables(client, cmd == "showx", cmd == "showall", err);
     } else {
         ret_val = -1;
-        LOG(ERROR) << "error: arg num: " << argc;
+        std::cerr << "error: arg num: " << argc << std::endl;
     }
     return ret_val;
 }
 
 int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc < 3) {
-        LOG(ERROR) << "args number error: " << argc << ", need >2.";
+        std::cerr << "args number error: " << argc << ", need >2." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1296,7 +1296,7 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 
     tera::ClientImpl* client_impl = static_cast<tera::ClientImpl*>(client);
     if (!client_impl->ShowTablesInfo(table_name, &table_meta, &tablet_list, err)) {
-        LOG(ERROR) << "table not exist: " << table_name;
+        std::cerr << "table not exist: " << table_name << std::endl;
         return -1;
     }
 
@@ -1307,7 +1307,7 @@ int32_t ShowSchemaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) 
 void BatchPutCallBack(RowMutation* mutation) {
     const ErrorCode& error_code = mutation->GetError();
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "exception occured, reason:" << error_code.GetReason();
+        std::cerr << "exception occured, reason:" << error_code.GetReason() << std::endl;
     }
     int32_t mut_num = mutation->MutationNum();
 
@@ -1320,7 +1320,7 @@ void BatchPutCallBack(RowMutation* mutation) {
         int32_t time_used = time_cur - g_start_time;
         if (time_cur > g_last_time) {
             g_last_time = time_cur;
-            LOG(INFO) << "Write file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+            std::cout << "Write file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
                 <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
         }
     }
@@ -1330,7 +1330,7 @@ void BatchPutCallBack(RowMutation* mutation) {
 
 int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4.";
+        std::cerr << "args number error: " << argc << ", need 4." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1339,7 +1339,7 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string record_file = argv[3];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
     const int32_t buf_size = 1024 * 1024;
@@ -1353,7 +1353,7 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     while (stream.getline(buf, buf_size)) {
         SplitString(buf, " ", &input_v);
         if (input_v.size() != 3 && input_v.size() != 2) {
-            LOG(ERROR) << "input file format error, skip it: " << buf;
+            std::cerr << "input file format error, skip it: " << buf << std::endl;
             continue;
         }
         std::string& rowkey = input_v[0];
@@ -1378,14 +1378,14 @@ int32_t BatchPutOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
-    LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    std::cout << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
     delete table;
     return 0;
 }
 
 int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4.";
+        std::cerr << "args number error: " << argc << ", need 4." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1394,7 +1394,7 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     std::string record_file = argv[3];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
     const int32_t buf_size = 1024 * 1024;
@@ -1408,7 +1408,7 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     while (stream.getline(buf, buf_size)) {
         SplitString(buf, " ", &input_v);
         if (input_v.size() != 3 && input_v.size() != 2) {
-            LOG(ERROR) << "input file format error, skip it: " << buf;
+            std::cerr << "input file format error, skip it: " << buf << std::endl;
             continue;
         }
         std::string& rowkey = input_v[0];
@@ -1418,7 +1418,7 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
         RowMutation* mutation = table->NewRowMutation(rowkey);
         int64_t value_int;
         if (!StringToNumber(value.c_str(), &value_int)) {
-           LOG(ERROR) << "invalid Integer number Got: " << value;
+           std::cerr << "invalid Integer number Got: " << value << std::endl;
            return -1;
         }
         if (input_v.size() == 2) {
@@ -1438,7 +1438,7 @@ int32_t BatchPutInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
 
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
-    LOG(INFO) << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    std::cout << "Write done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
     delete table;
     return 0;
 }
@@ -1457,8 +1457,8 @@ void BatchGetCallBack(RowReader* reader) {
             int32_t time_used = time_cur - g_start_time;
             if (time_cur > g_last_time) {
                 g_last_time = time_cur;
-                LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                std::cout << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S " << std::endl;
             }
         }
         std::cout << reader->RowName() << ":"
@@ -1472,7 +1472,7 @@ void BatchGetCallBack(RowReader* reader) {
 
 int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
+        std::cerr << "args number error: " << argc << ", need 4 | 5." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1488,7 +1488,7 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string input_file = argv[3];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
     const int32_t buf_size = 1024 * 1024;
@@ -1501,7 +1501,7 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     while (stream.getline(buf, buf_size)) {
         SplitString(buf, " ", &input_v);
         if (input_v.size() <= 0) {
-            LOG(ERROR) << "input file format error: " << buf;
+            std::cerr << "input file format error: " << buf << std::endl;
             continue;
         }
         std::string& rowkey = input_v[0];
@@ -1511,7 +1511,7 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             ResultStream* result_stream;
             desc.SetEnd(rowkey);
             if ((result_stream = table->Scan(desc, err)) == NULL) {
-                LOG(ERROR) << "fail to get records from table: " << tablename;
+                std::cerr << "fail to get records from table: " << tablename << std::endl;
                 return -1;
             }
 
@@ -1528,8 +1528,8 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
                     int32_t time_used = time_cur - g_start_time;
                     if (time_cur > g_last_time) {
                         g_last_time = time_cur;
-                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                        std::cout << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S " << std::endl;
                     }
                 }
                 /*
@@ -1565,7 +1565,7 @@ int32_t BatchGetOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
-    LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    std::cout << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
     delete table;
     return 0;
 }
@@ -1584,8 +1584,8 @@ void BatchGetInt64CallBack(RowReader* reader) {
             int32_t time_used = time_cur - g_start_time;
             if (time_cur > g_last_time) {
                 g_last_time = time_cur;
-                LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                std::cout << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                    <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S " << std::endl;
             }
         }
         uint64_t tmp_data = io::DecodeBigEndain(reader->Value().c_str());
@@ -1601,7 +1601,7 @@ void BatchGetInt64CallBack(RowReader* reader) {
 
 int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 4 && argc != 5) {
-        LOG(ERROR) << "args number error: " << argc << ", need 4 | 5.";
+        std::cerr << "args number error: " << argc << ", need 4 | 5." << std::endl;
         Usage(argv[0]);
         return -1;
     }
@@ -1617,7 +1617,7 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     std::string input_file = argv[3];
     Table* table = NULL;
     if ((table = client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
     const int32_t buf_size = 1024 * 1024;
@@ -1630,7 +1630,7 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     while (stream.getline(buf, buf_size)) {
         SplitString(buf, " ", &input_v);
         if (input_v.size() <= 0) {
-            LOG(ERROR) << "input file format error: " << buf;
+            std::cerr << "input file format error: " << buf << std::endl;
             continue;
         }
         std::string& rowkey = input_v[0];
@@ -1640,7 +1640,7 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
             ResultStream* result_stream;
             desc.SetEnd(rowkey);
             if ((result_stream = table->Scan(desc, err)) == NULL) {
-                LOG(ERROR) << "fail to get records from table: " << tablename;
+                std::cerr << "fail to get records from table: " << tablename << std::endl;
                 return -1;
             }
 
@@ -1657,8 +1657,8 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
                     int32_t time_used = time_cur - g_start_time;
                     if (time_cur > g_last_time) {
                         g_last_time = time_cur;
-                        LOG(INFO) << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
-                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S ";
+                        std::cout << "Read file  "<<g_key_num<<" keys "<<g_key_num/(time_used?time_used:1)
+                            <<" keys/S "<<g_total_size/1024.0/1024/(time_used?time_used:1)<<" MB/S " << std::endl;
                     }
                 }
 
@@ -1695,7 +1695,7 @@ int32_t BatchGetInt64Op(Client* client, int32_t argc, char** argv, ErrorCode* er
     }
     g_end_time = time(NULL);
     g_used_time = g_end_time-g_start_time;
-    LOG(INFO) << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
+    std::cout << "Read done,write_key_num=" << g_key_num << " used_time=" << g_used_time <<std::endl;
     delete table;
     return 0;
 }
@@ -1725,13 +1725,13 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     uint64_t snapshot = 0;
     if (argc == 5 && strcmp(argv[3], "del") == 0) {
         if (!client->DelSnapshot(tablename, FLAGS_snapshot, err)) {
-            LOG(ERROR) << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason();
+            std::cerr << "fail to del snapshot: " << FLAGS_snapshot << " ," << err->GetReason() << std::endl;
             return -1;
         }
         std::cout << "Del snapshot " << snapshot << std::endl;
     } else if (strcmp(argv[3], "create") == 0) {
         if (!client->GetSnapshot(tablename, &snapshot, err)) {
-            LOG(ERROR) << "fail to get snapshot: " << err->GetReason();
+            std::cerr << "fail to get snapshot: " << err->GetReason() << std::endl;
             return -1;
         }
         std::cout << "new snapshot: " << snapshot << std::endl;
@@ -1744,7 +1744,7 @@ int32_t SnapshotOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
             return -1;
         }
         if (!client->Rollback(tablename, FLAGS_snapshot, FLAGS_rollback_name, err)) {
-            LOG(ERROR) << "fail to rollback to snapshot: " << err->GetReason();
+            std::cerr << "fail to rollback to snapshot: " << err->GetReason() << std::endl;
             return -1;
         }
         std::cout << "rollback to snapshot: " << FLAGS_snapshot << std::endl;
@@ -1796,7 +1796,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     std::string tablet_path = argv[3];
     std::string::size_type pos = tablet_path.find('/');
     if (pos == std::string::npos) {
-        LOG(ERROR) << "tablet path error, format [tablename/tabletname]: " << tablet_path;
+        std::cerr << "tablet path error, format [tablename/tabletname]: " << tablet_path << std::endl;
         return -1;
     }
     std::string tablename = tablet_path.substr(0, pos);
@@ -1804,7 +1804,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
 
     std::vector<TabletInfo> tablet_list;
     if (!client->GetTabletLocation(tablename, &tablet_list, err)) {
-        LOG(ERROR) << "fail to list tablet info";
+        std::cerr << "fail to list tablet info" << std::endl;
         return -1;
     }
 
@@ -1815,7 +1815,7 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
         }
     }
     if (tablet_it == tablet_list.end()) {
-        LOG(ERROR) << "fail to find tablet: " << tablet_path;
+        std::cerr << "fail to find tablet: " << tablet_path << std::endl;
         return -1;
     }
 
@@ -1830,20 +1830,20 @@ int32_t CompactTabletOp(Client* client, int32_t argc, char** argv, ErrorCode* er
     std::cerr << "try compact tablet: " << tablet_it->path
         << " on " << tabletnode_client.GetConnectAddr() << std::endl;
     if (!tabletnode_client.CompactTablet(&request, &response)) {
-        LOG(ERROR) << "no response from [" << tabletnode_client.GetConnectAddr()
-            << "]";
+        std::cerr << "no response from [" << tabletnode_client.GetConnectAddr()
+            << "]" << std::endl;
         return -1;
     }
 
     if (response.status() != kTabletNodeOk) {
-        LOG(ERROR) << "fail to compact table, status: "
-            << StatusCodeToString(response.status());
+        std::cerr << "fail to compact table, status: "
+            << StatusCodeToString(response.status()) << std::endl;
         return -1;
     }
 
     if (response.compact_status() != kTableCompacted) {
-        LOG(ERROR) << "fail to compact table, status: "
-            << StatusCodeToString(response.compact_status());
+        std::cerr << "fail to compact table, status: "
+            << StatusCodeToString(response.compact_status()) << std::endl;
         return -1;
     }
 
@@ -1878,7 +1878,7 @@ int32_t TabletOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     arg_list.push_back(tablet_id);
     arg_list.push_back(server_addr);
     if (!client->CmdCtrl("tablet", arg_list, NULL, NULL, err)) {
-        LOG(ERROR) << "fail to " << op << " tablet " << tablet_id;
+        std::cerr << "fail to " << op << " tablet " << tablet_id << std::endl;
         return -1;
     }
     std::cout << op << " tablet " << tablet_id << " success" << std::endl;
@@ -1895,8 +1895,8 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string old_table_name = argv[2];
     std::string new_table_name = argv[3];
     if (!client->Rename(old_table_name, new_table_name, err)) {
-        LOG(ERROR) << "fail to rename table: "
-                   << old_table_name << " -> " << new_table_name << std::endl;
+        std::cerr << "fail to rename table: "
+            << old_table_name << " -> " << new_table_name << std::endl;
         return -1;
     }
     std::cout << "rename OK: " << old_table_name
@@ -1922,7 +1922,7 @@ int32_t MetaOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     arg_list.push_back(op);
     arg_list.push_back(filename);
     if (!client->CmdCtrl("meta", arg_list, NULL, NULL, err)) {
-        LOG(ERROR) << "fail to " << op << " meta";
+        std::cerr << "fail to " << op << " meta" << std::endl;
         return -1;
     }
     std::cout << op << " tablet success" << std::endl;
@@ -1986,7 +1986,7 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     std::string tablename = argv[2];
     TableImpl* table = NULL;
     if ((table = (TableImpl*)client->OpenTable(tablename, err)) == NULL) {
-        LOG(ERROR) << "fail to open table";
+        std::cerr << "fail to open table" << std::endl;
         return -1;
     }
 
@@ -1995,7 +1995,7 @@ int32_t FindTsOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
 
     TabletMeta meta;
     if (!table->GetTabletMetaForKey(rowkey, &meta)) {
-        LOG(ERROR) << "fail to get tablet meta for " << rowkey;
+        std::cerr << "fail to get tablet meta for " << rowkey << std::endl;
         return -1;
     }
     std::cout << meta.server_addr() << "/" << meta.path() << std::endl;
@@ -2262,8 +2262,8 @@ int32_t Meta2Op(Client *client, int32_t argc, char** argv) {
 static int32_t CreateUser(Client* client, const std::string& user,
                           const std::string& password, ErrorCode* err) {
     if (!client->CreateUser(user, password, err)) {
-        LOG(ERROR) << "fail to create user: " << user
-            << ", " << strerr(*err);
+        std::cerr << "fail to create user: " << user
+            << ", " << strerr(*err) << std::endl;
         return -1;
     }
     return 0;
@@ -2271,8 +2271,8 @@ static int32_t CreateUser(Client* client, const std::string& user,
 
 static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* err) {
     if (!client->DeleteUser(user, err)) {
-        LOG(ERROR) << "fail to delete user: " << user
-            << ", " << strerr(*err);
+        std::cerr << "fail to delete user: " << user
+            << ", " << strerr(*err) << std::endl;
         return -1;
     }
     return 0;
@@ -2281,8 +2281,8 @@ static int32_t DeleteUser(Client* client, const std::string& user, ErrorCode* er
 static int32_t ChangePwd(Client* client, const std::string& user,
                          const std::string& password, ErrorCode* err) {
     if (!client->ChangePwd(user, password, err)) {
-        LOG(ERROR) << "fail to update user: " << user
-            << ", " << strerr(*err);
+        std::cerr << "fail to update user: " << user
+            << ", " << strerr(*err) << std::endl;
         return -1;
     }
     return 0;
@@ -2291,8 +2291,8 @@ static int32_t ChangePwd(Client* client, const std::string& user,
 static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err) {
     std::vector<std::string> user_infos;
     if (!client->ShowUser(user, user_infos, err)) {
-        LOG(ERROR) << "fail to show user: " << user
-            << ", " << strerr(*err);
+        std::cerr << "fail to show user: " << user
+            << ", " << strerr(*err) << std::endl;
         return -1;
     }
     if (user_infos.size() < 1) {
@@ -2310,8 +2310,8 @@ static int32_t ShowUser(Client* client, const std::string& user, ErrorCode* err)
 static int32_t AddUserToGroup(Client* client, const std::string& user,
                                 const std::string& group, ErrorCode* err) {
     if (!client->AddUserToGroup(user, group, err)) {
-        LOG(ERROR) << "fail to add user: " << user
-            << " to group:" << group << strerr(*err);
+        std::cerr << "fail to add user: " << user
+            << " to group:" << group << strerr(*err) << std::endl;
         return -1;
     }
     return 0;
@@ -2320,8 +2320,8 @@ static int32_t AddUserToGroup(Client* client, const std::string& user,
 static int32_t DeleteUserFromGroup(Client* client, const std::string& user,
                                      const std::string& group, ErrorCode* err) {
     if (!client->DeleteUserFromGroup(user, group, err)) {
-        LOG(ERROR) << "fail to delete user: " << user
-            << " from group: " << group << strerr(*err);
+        std::cerr << "fail to delete user: " << user
+            << " from group: " << group << strerr(*err) << std::endl;
         return -1;
     }
     return 0;
@@ -2359,7 +2359,7 @@ int main(int argc, char* argv[]) {
     Client* client = Client::NewClient(FLAGS_flagfile, NULL);
 
     if (client == NULL) {
-        LOG(ERROR) << "client instance not exist";
+        std::cerr << "client instance not exist" << std::endl;
         return -1;
     }
 
@@ -2448,8 +2448,8 @@ int main(int argc, char* argv[]) {
         Usage(argv[0]);
     }
     if (error_code.GetType() != ErrorCode::kOK) {
-        LOG(ERROR) << "fail reason: " << strerr(error_code)
-            << " " << error_code.GetReason();
+        std::cerr << "fail reason: " << strerr(error_code)
+            << " " << error_code.GetReason() << std::endl;
     }
     delete client;
     return ret;

@@ -72,9 +72,6 @@ ResultStreamAsyncImpl::ResultStreamAsyncImpl(TableImpl* table, ScanDescImpl* sca
 
     _cache_max_size = ((FLAGS_tera_sdk_scan_async_cache_size << 20)
             + _scan_desc_impl->GetBufferSize() - 1) / _scan_desc_impl->GetBufferSize();
-    VLOG(6) << "scan: cache max slot: " << _cache_max_size
-        << ", cache size: " << FLAGS_tera_sdk_scan_async_cache_size << " MB"
-        << ", trans buf size: " << _scan_desc_impl->GetBufferSize() << " bytes";
     _scan_thread.Start(boost::bind(&ResultStreamAsyncImpl::DoScan, this));
     ThisThread::Yield();
 }
@@ -126,7 +123,6 @@ void ResultStreamAsyncImpl::Next() {
 }
 
 void ResultStreamAsyncImpl::DoScan() {
-    VLOG(6) << "streaming begin (session id: " << _session_id << ")";
     _part_of_session = false;
     while (!_stopped) {
         _table_ptr->ScanTabletAsync(this);
@@ -136,50 +132,27 @@ void ResultStreamAsyncImpl::DoScan() {
 
         uint32_t sleep_time = 1;
         while (_invoked_count == FLAGS_tera_sdk_scan_async_parallel_max_num) {
-            LOG(INFO) << "scan sleep time: " << sleep_time;
             ThisThread::Sleep(500 * sleep_time);
             sleep_time++;
         }
     }
-    VLOG(6) << "streaming is finished (session id: " << _session_id << ")";
 }
 
 void ResultStreamAsyncImpl::DoScanCallback(int64_t session_id, ScanTabletResponse* response,
                                            bool failed) {
-    VLOG(15) << "ResultStreamAsyncImpl::DoScanCallback():"
-        << "failed: " << failed
-        << ", sequece id: " << response->sequence_id()
-        << ", record id: " << response->results_id()
-        << ", compeled: " << response->complete()
-        << ", invoked_count: " << _invoked_count
-        << ", queue size: " << _queue_size;
     bool need_rebuild_stream = false;
     bool stream_broken = false;
     if (session_id != _session_id) {
-        LOG(WARNING) << "invalid response [cur session id: " << _session_id
-            << ", input session id: " << session_id
-            << "], skip";
     } else if (failed) {
-        LOG(WARNING) << "streaming is broken (session id: "
-            << _session_id << "), rebuild ...";
         need_rebuild_stream = true;
         stream_broken = true;
     } else if (static_cast<uint64_t>(_cur_data_id) > response->results_id()) {
-        LOG(WARNING) << "invalid response [cur data id: " << _cur_data_id
-            << ", record id: " << response->results_id()
-            << "], skip";
     } else {
         while (static_cast<uint64_t>(_cur_data_id) != response->results_id()) {
-            VLOG(15) << "id: " << _cur_data_id
-                << ", result id: " << response->results_id()
-                << ", waiting ...";
             _scan_push_order_event.Wait();
         }
 
         atomic_inc(&_cur_data_id);
-        VLOG(15) << "id: " << response->results_id()
-            << ", size: " << response->results().key_values_size()
-            << ", next id: " << _cur_data_id;
         if (response->has_results() && response->results().key_values_size() > 0) {
             while (static_cast<uint64_t>(_queue_size) == _cache_max_size) {
                 _scan_pop_event.Wait();
@@ -217,8 +190,6 @@ void ResultStreamAsyncImpl::DoScanCallback(int64_t session_id, ScanTabletRespons
 }
 
 void ResultStreamAsyncImpl::RebuildStream(ScanTabletResponse* response) {
-    VLOG(15) << "rebuild stream (session id: " << _session_id << ")";
-
     if (!response->complete()) {
         int32_t last_result_pos = response->results().key_values_size() - 1;
         const KeyValuePair& kv = response->results().key_values(last_result_pos);
@@ -235,7 +206,6 @@ void ResultStreamAsyncImpl::RebuildStream(ScanTabletResponse* response) {
     _session_id = get_micros();
     _part_of_session = false;
     _cur_data_id = 0;
-    VLOG(15) << "rebuild new stream, session id: " << _session_id;
 }
 
 void ResultStreamAsyncImpl::GetRpcHandle(ScanTabletRequest** request,
@@ -256,8 +226,6 @@ void ResultStreamAsyncImpl::ReleaseRpcHandle(ScanTabletRequest* request,
 void ResultStreamAsyncImpl::OnFinish(ScanTabletRequest* request,
                                      ScanTabletResponse* response) {
     if (request->session_id() != _session_id) {
-        LOG(WARNING) << "invalid session id: " << request->session_id()
-            << " (current: " << _session_id << "), skip";
         return;
     }
     DoScanCallback(request->session_id(), response, response->status() != kTabletNodeOk);
@@ -703,7 +671,6 @@ bool ScanDescImpl::ParseFilterString() {
             Filter* pf = _filter_list.add_filter();
             pf->CopyFrom(filter);
         } else {
-            LOG(ERROR) << "fail to parse expression: " << filter_v[i];
             return false;
         }
     }
@@ -719,7 +686,6 @@ bool ScanDescImpl::ParseSubFilterString(const string& filter_str,
                                         Filter* filter) {
     string filter_t = RemoveInvisibleChar(filter_str);
     if (filter_t.size() < 3) {
-        LOG(ERROR) << "illegal filter expression: " << filter_t;
         return false;
     }
     if (filter_t.find("@") == string::npos) {
@@ -729,7 +695,6 @@ bool ScanDescImpl::ParseSubFilterString(const string& filter_str,
         }
     } else {
         // TODO: other filter
-        LOG(ERROR) << "illegal filter expression: " << filter_t;
         return false;
     }
     return true;
@@ -738,13 +703,10 @@ bool ScanDescImpl::ParseSubFilterString(const string& filter_str,
 bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
                                            Filter* filter) {
     if (filter == NULL) {
-        LOG(ERROR) << "filter ptr is NULL.";
         return false;
     }
 
     if (_max_version != 1) {
-        LOG(ERROR) << "only support 1 version scan if there is a value filter: "
-            << filter_str;
         return false;
     }
     string::size_type type_pos;
@@ -753,8 +715,6 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
         filter->set_value_type(kINT64);
         cf_pos = type_pos + 5;
     } else {
-        LOG(ERROR) << "only support int64 value filter, but got: "
-            << filter_str;
         return false;
     }
 
@@ -786,7 +746,6 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
         value = filter_str.substr(op_pos + 2, filter_str.size() - op_pos - 2);
         comp_op = NE;
     } else {
-        LOG(ERROR) << "fail to parse expression: " << filter_str;
         return false;
     }
     string type;
@@ -798,7 +757,6 @@ bool ScanDescImpl::ParseValueCompareFilter(const string& filter_str,
 
     string value_internal;
     if (!_value_converter(value, type, &value_internal)) {
-        LOG(ERROR) << "fail to convert value: \""<< value << "\"(" << type << ")";
         return false;
     }
 

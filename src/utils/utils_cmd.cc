@@ -8,7 +8,6 @@
 #include <stdlib.h>
 
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 
 #include "common/base/scoped_ptr.h"
 #include "common/base/string_ext.h"
@@ -26,7 +25,6 @@ namespace utils {
 std::string GetBinaryLocationDir() {
     char exec_full_path[1024] = {'\0'};
     readlink("/proc/self/exe", exec_full_path, 1024);
-    VLOG(5) << "current binary location: " << exec_full_path;
 
     std::string full_dir;
     SplitStringPath(exec_full_path, &full_dir, NULL);
@@ -50,7 +48,6 @@ std::string GetValueFromEnv(const std::string& env_name) {
 
     const char* env = getenv(env_name.c_str());
     if (!env) {
-        VLOG(5) << "fail to fetch from env: " << env_name;
         return "";
     }
     return env;
@@ -100,7 +97,6 @@ bool ExecuteShellCmd(const std::string cmd, std::string* ret_str) {
     char output_buffer[80];
     FILE *fp = popen(cmd.c_str(), "r");
     if (!fp) {
-        LOG(ERROR) << "fail to execute cmd: " << cmd;
         return false;
     }
     fgets(output_buffer, sizeof(output_buffer), fp);
@@ -116,7 +112,6 @@ std::string GetLocalHostAddr() {
         "/sbin/ifconfig | grep 'inet addr:'| grep -v '127.0.0.1' | cut -d: -f2 | awk '{ print $1}'";
     std::string addr;
     if (!ExecuteShellCmd(cmd, &addr)) {
-        LOG(ERROR) << "fail to fetch local host addr";
     } else if (addr.length() > 1) {
         addr.erase(addr.length() - 1, 1);
     }
@@ -126,7 +121,6 @@ std::string GetLocalHostAddr() {
 std::string GetLocalHostName() {
     char str[kMaxHostNameSize + 1];
     if (0 != gethostname(str, kMaxHostNameSize + 1)) {
-        LOG(FATAL) << "gethostname fail";
         exit(1);
     }
     std::string hostname(str);
@@ -134,25 +128,25 @@ std::string GetLocalHostName() {
 }
 
 void SetupLog(const std::string& name) {
-    // log info/warning/error/fatal to tera.log
-    // log warning/error/fatal to tera.wf
-
-    std::string program_name = "tera";
-    if (!name.empty()) {
-        program_name = name;
-    }
-
-    std::string log_filename = FLAGS_log_dir + "/" + program_name + ".INFO.";
-    std::string wf_filename = FLAGS_log_dir + "/" + program_name + ".WARNING.";
-    google::SetLogDestination(google::INFO, log_filename.c_str());
-    google::SetLogDestination(google::WARNING, wf_filename.c_str());
-    google::SetLogDestination(google::ERROR, "");
-    google::SetLogDestination(google::FATAL, "");
-
-    google::SetLogSymlink(google::INFO, program_name.c_str());
-    google::SetLogSymlink(google::WARNING, program_name.c_str());
-    google::SetLogSymlink(google::ERROR, "");
-    google::SetLogSymlink(google::FATAL, "");
+//    // log info/warning/error/fatal to tera.log
+//    // log warning/error/fatal to tera.wf
+//
+//    std::string program_name = "tera";
+//    if (!name.empty()) {
+//        program_name = name;
+//    }
+//
+//    std::string log_filename = FLAGS_log_dir + "/" + program_name + ".INFO.";
+//    std::string wf_filename = FLAGS_log_dir + "/" + program_name + ".WARNING.";
+//    google::SetLogDestination(google::INFO, log_filename.c_str());
+//    google::SetLogDestination(google::WARNING, wf_filename.c_str());
+//    google::SetLogDestination(google::ERROR, "");
+//    google::SetLogDestination(google::FATAL, "");
+//
+//    google::SetLogSymlink(google::INFO, program_name.c_str());
+//    google::SetLogSymlink(google::WARNING, program_name.c_str());
+//    google::SetLogSymlink(google::ERROR, "");
+//    google::SetLogSymlink(google::FATAL, "");
 }
 
 } // namespace utils

@@ -4,8 +4,6 @@
 
 #include "scan_filter.h"
 
-#include <glog/logging.h>
-
 namespace tera {
 ScanFilter::ScanFilter(const FilterList& filter_list)
     : _filter_list(filter_list),
@@ -31,7 +29,6 @@ bool ScanFilter::Check(const KeyValuePair& kv) {
             }
         } break;
         default: {
-            LOG(ERROR) << "not support.";
             return false;
         }}
     }
@@ -46,7 +43,6 @@ bool ScanFilter::IsSuccess() {
 }
 
 void ScanFilter::GetAllCfs(std::set<string>* cf_set) {
-    CHECK(cf_set != NULL);
 
     for (int i = 0; i < _filter_num; ++i) {
         const Filter& filter = _filter_list.filter(i);
@@ -56,8 +52,7 @@ void ScanFilter::GetAllCfs(std::set<string>* cf_set) {
                 cf_set->insert(filter.content());
             }
             break;
-        default:
-            LOG(ERROR) << "not support.";
+        default:;
         }
     }
 }
@@ -77,7 +72,6 @@ int ScanFilter::BinCompCheck(const KeyValuePair& kv, const Filter& filter) {
         }
 
     } else {
-        LOG(ERROR) << "not support";
         return -1;
     }
 }
@@ -103,8 +97,7 @@ bool ScanFilter::DoBinCompCheck(BinCompOp op, const string& l_value, const strin
     case GE:
         if (res >= 0) { return true; }
         break;
-    default:
-        LOG(ERROR) << "illegal compare operator: " << op;
+    default:;
     }
     return false;
 }

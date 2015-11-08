@@ -10,8 +10,6 @@
 #include <unistd.h>
 
 #include <gflags/gflags.h>
-#include <glog/logging.h>
-
 #include "common/base/string_ext.h"
 
 DECLARE_int32(file_op_retry_times);
@@ -41,7 +39,6 @@ bool FileStream::Close(FileErrorCode* error_code) {
     Flush();
 
     if (fclose(m_fp) != 0) {
-        LOG(ERROR) << "fail to close file, errno: " << strerror(errno);
         SetErrorCode(error_code, kFileErrClose);
         return false;
     }
@@ -67,7 +64,6 @@ int64_t FileStream::Read(void* buffer, int64_t buffer_size,
     if (success) {
         SetErrorCode(error_code, kFileSuccess);
     } else {
-        LOG(ERROR) << "error occurred in reader, errono:" << strerror(errno);
         SetErrorCode(error_code, kFileErrRead);
     }
     return success ? read_bytes : -1;
@@ -94,20 +90,12 @@ int64_t FileStream::Write(const void* buffer, int64_t buffer_size,
         total_size += static_cast<int64_t>(ret_size);
 
         if (ret_size < expect_size) {
-            LOG(ERROR) << "write down enough bytes and fail, ["
-                << "buffur_size = " << buffer_size
-                << ", writen down total size = " << total_size
-                << ", expect_size = " << expect_size
-                << ", this writen size = " << ret_size
-                << "], reason: " << strerror(errno);
-            CHECK(ferror(m_fp)) << "file writer is broken";
             if (errno != EINTR && ret_size == 0u) break;
         }
     }
     if (total_size == buffer_size) {
         SetErrorCode(error_code, kFileSuccess);
     } else {
-        LOG(ERROR) << "error occurred in writter, errono:" << strerror(errno);
         SetErrorCode(error_code, kFileErrWrite);
     }
     return total_size > 0 ? total_size : -1;
@@ -151,7 +139,6 @@ int64_t FileStream::GetSize(const std::string& file_path,
     if (file_exist != 0) {
         SetErrorCode(error_code, kFileErrNotExit);
         if (error_code == NULL) {
-            LOG(ERROR) << "file " << file_path << " not exists";
         }
         return file_size;
     }
@@ -160,15 +147,12 @@ int64_t FileStream::GetSize(const std::string& file_path,
     if (stat(file_path.c_str(), &stat_buf) < 0) {
         file_size = -1;
 //         SetErrorCode(error_code, errno);
-        LOG(ERROR) << "stat error for " << file_path;
         return file_size;
     }
 
     if (S_ISDIR(stat_buf.st_mode)) {
         file_size = -1;
 //         SetErrorCode(error_code, errno);
-        LOG(ERROR) << "input file name " << file_path
-            << " is a directory";
         return file_size;
     } else {
         SetErrorCode(error_code, kFileSuccess);

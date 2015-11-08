@@ -5,7 +5,6 @@
 #include "common/net/ip_address.h"
 
 #include <vector>
-#include <glog/logging.h>
 
 #include "common/base/string_ext.h"
 #include "common/base/string_number.h"
@@ -50,17 +49,14 @@ std::string IpAddress::GetPortString() const {
 
 
 bool IpAddress::Assign(const std::string& ip_port) {
-    CHECK(!ip_port.empty());
     m_valid_address = false;
     std::vector<std::string> items;
     SplitString(ip_port, delim, &items);
     if (items.size() != 2) {
-        LOG(WARNING) << "invalid ip address: " << ip_port;
         return false;
     }
 
     if (!StringToNumber(items[1], &m_port)) {
-        LOG(ERROR) << "invalid port number: " << items[1];
         return false;
     }
     m_ip = items[0];
@@ -71,7 +67,6 @@ bool IpAddress::Assign(const std::string& ip_port) {
 bool IpAddress::Assign(const std::string& ip, const std::string& port) {
     m_valid_address = false;
     if (!StringToNumber(port, &m_port)) {
-        LOG(ERROR) << "invalid port number: " << port;
         return m_valid_address;
     }
     m_ip = ip;

@@ -4,7 +4,6 @@
 
 #include "sdk/schema_impl.h"
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 
 DECLARE_int64(tera_tablet_write_block_size);
 DECLARE_int64(tera_tablet_ldb_sst_size);
@@ -321,7 +320,6 @@ ColumnFamilyDescriptor* TableDescImpl::AddColumnFamily(const std::string& cf_nam
                                         const std::string& lg_name) {
     LGMap::iterator it = _lg_map.find(lg_name);
     if (it == _lg_map.end()) {
-        LOG(ERROR) << "lg:" << lg_name << " not exist.";
         return NULL;
     }
     CFMap::iterator cf_it = _cf_map.find(cf_name);

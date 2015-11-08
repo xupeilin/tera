@@ -9,7 +9,6 @@
 #include <iostream>
 #include <boost/bind.hpp>
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 
 #include "common/thread_pool.h"
 #include "tera.h"
@@ -44,16 +43,12 @@ public:
         std::string value;
         tera::ErrorCode err;
         if (!_table->Get(key, "", "", &value, &err)) {
-            LOG(ERROR) << "fail to read: " << key
-                << ", reason: " << err.GetReason();
             return false;
         }
         return DeSerializeRecord(value, record);
     }
 
     bool Write(const Key& key, const Record& record) {
-        CHECK(_s_pending_num.Get() >= 0) << "pending num < 0: " << _s_pending_num.Get();
-        CHECK(_s_pending_size.Get() >= 0) << "pending size < 0: " << _s_pending_size.Get();
         while (_s_pending_num.Get() > FLAGS_tera_sdk_rpc_max_pending_num ||
                _s_pending_size.Get() > FLAGS_tera_sdk_rpc_max_pending_buffer_size * 1024 * 1024) {
             usleep(1000000);
@@ -97,7 +92,6 @@ public:
         desc.SetAsync(false);
 
         if ((_scanner = _table->Scan(desc, &err)) == NULL) {
-            LOG(ERROR) << "fail to scan the table, reason:" << err.GetReason();
             return false;
         }
         return true;
@@ -105,7 +99,6 @@ public:
 
     bool NextPair(KVPair* pair) {
         if (_scanner == NULL) {
-            LOG(ERROR) << "scanner is empty!";
             return false;
         }
         if (!_scanner->Done()) {
@@ -124,8 +117,6 @@ public:
         const tera::ErrorCode& error_code = mutation->GetError();
         if (error_code.GetType() != tera::ErrorCode::kOK) {
             _s_write_fail_num.Inc();
-            VLOG(5)<< "write key failed: key(" << mutation->RowKey()
-                << "), reason:" << error_code.GetReason();
         } else {
             _s_write_succ_num.Inc();
         }
@@ -200,10 +191,6 @@ private:
     }
 
     void PrintStatus() {
-        LOG(INFO) << "[TeraEasy] pending num " << _s_pending_num.Get()
-            << ", pending size " << _s_pending_size.Get()
-            << ", success " << _s_write_succ_num.Clear()
-            << ", fail " << _s_write_fail_num.Clear();
         ThreadPool::Task task = boost::bind(&TableImpl::PrintStatus, this);
         _thread_pool.DelayTask(1000, task);
     }
@@ -238,7 +225,6 @@ Table* OpenTable(const std::string& table_name, const std::string& conf_path) {
     tera::ErrorCode err;
     tera::Table* table = NULL;
     if (client == NULL || (table = client->OpenTable(table_name, &err)) == NULL) {
-        LOG(ERROR) << "fail to open table: " << table_name;
         return NULL;
     }
     return new TableImpl(table, client);

@@ -609,11 +609,8 @@ private:
 
 class Client {
 public:
-    /// 使用glog的用户必须调用此接口，避免glog被重复初始化
-    static void SetGlogIsInitialized();
-
     static Client* NewClient(const std::string& confpath,
-                             const std::string& log_prefix,
+                             const std::string& log_file,
                              ErrorCode* err = NULL);
 
     static Client* NewClient(const std::string& confpath,

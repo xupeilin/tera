@@ -15,6 +15,7 @@ INCPATH += -I./src -I./include -I./src/leveldb/include -I./src/leveldb \
 CFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 CXXFLAGS += $(OPT) $(SHARED_CFLAGS) $(INCPATH)
 LDFLAGS += -rdynamic $(DEPS_LDPATH) $(DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
+SDK_LDFLAGS += -rdynamic $(DEPS_LDPATH) $(SDK_DEPS_LDFLAGS) -lpthread -lrt -lz -ldl
 
 PROTO_FILES := $(wildcard src/proto/*.proto)
 PROTO_OUT_CC := $(PROTO_FILES:.proto=.pb.cc)
@@ -103,7 +104,7 @@ libtera.a: $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 	$(AR) -rs $@ $(SDK_OBJ) $(PROTO_OBJ) $(OTHER_OBJ) $(COMMON_OBJ)
 
 teracli: $(CLIENT_OBJ) $(LIBRARY)
-	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(LDFLAGS)
+	$(CXX) -o $@ $(CLIENT_OBJ) $(LIBRARY) $(SDK_LDFLAGS)
 
 teramo: $(MONITOR_OBJ) $(LIBRARY)
 	$(CXX) -o $@ $(MONITOR_OBJ) $(LIBRARY) $(LDFLAGS)

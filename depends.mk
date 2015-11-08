@@ -52,3 +52,5 @@ DEPS_LDPATH = -L$(SOFA_PBRPC_LIBDIR) -L$(PROTOBUF_LIBDIR) \
               -L$(GPERFTOOLS_LIBDIR) -L$(INS_LIBDIR)
 DEPS_LDFLAGS = -lins_sdk -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
                -lgtest_main -lgtest -lglog -lgflags -ltcmalloc_minimal
+SDK_DEPS_LDFLAGS = -lins_sdk -lsofa-pbrpc -lprotobuf -lsnappy -lzookeeper_mt \
+               -lgtest_main -lgtest -lgflags -ltcmalloc_minimal

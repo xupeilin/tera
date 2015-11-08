@@ -8,7 +8,6 @@
 #include <string>
 
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 #include <zookeeper/zookeeper.h>
 
 #include "common/file/file_path.h"
@@ -151,7 +150,6 @@ const char * ZooKeeperUtil::GetNodeName(const char * path) {
 int32_t ZooKeeperUtil::GetSequenceNo(const std::string& name) {
     size_t name_len = name.size();
     if (name_len < 10) {
-        LOG(ERROR) << "name [" << name << "] too short";
         return -1;
     }
 
@@ -167,7 +165,6 @@ int32_t ZooKeeperUtil::GetSequenceNo(const std::string& name) {
         if (*seq_end_ptr == '\0' && seq_no > 0) {
             return seq_no;
         } else {
-            LOG(ERROR) << "name [" << name << "] not end in 10 digit";
             return -1;
         }
     } else {
@@ -198,11 +195,9 @@ bool FakeZkUtil::WriteNode(const std::string& name, const std::string& value) {
 bool FakeZkUtil::ReadNode(const std::string& name, std::string* value) {
     FileStream node_file;
     if (!node_file.Open(name, FILE_READ)) {
-        LOG(ERROR) << "fail to open node file: " << name;
         return false;
     }
     if (node_file.ReadLine(value) < 0) {
-        LOG(ERROR) << "fail to read node file: " << name;
         return false;
     }
     node_file.Close();
@@ -219,8 +214,6 @@ bool FakeZkUtil::ListNodes(const std::string& path,
 
 bool InsUtil::ReadNode(const std::string& name, std::string* value) {
     static galaxy::ins::sdk::InsSDK ins_sdk(FLAGS_tera_ins_addr_list);
-    galaxy::ins::sdk::SDKError err;
-    CHECK(ins_sdk.Get(name, value, &err)) << "sdk read ins fail";
     return true;
 }
 
