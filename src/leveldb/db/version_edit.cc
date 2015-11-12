@@ -8,6 +8,7 @@
 
 #include "db/version_edit.h"
 
+#include "db/filename.h"
 #include "db/version_set.h"
 #include "util/coding.h"
 
@@ -302,14 +303,26 @@ std::string VersionEdit::DebugString() const {
     r.append("\n  DeleteFile: ");
     AppendNumberTo(&r, iter->first);
     r.append(" ");
-    AppendNumberTo(&r, iter->second.number);
+    uint64_t tablet, file;
+    ParseFullFileNumber(iter->second.number, &tablet, &file);
+    AppendNumberTo(&r, tablet);
+    r.append(":");
+    AppendNumberTo(&r, file);
+    r.append(" ");
+    r.append(iter->second.smallest.DebugString());
+    r.append(" .. ");
+    r.append(iter->second.largest.DebugString());
   }
   for (size_t i = 0; i < new_files_.size(); i++) {
     const FileMetaData& f = new_files_[i].second;
     r.append("\n  AddFile: ");
     AppendNumberTo(&r, new_files_[i].first);
     r.append(" ");
-    AppendNumberTo(&r, f.number);
+    uint64_t tablet, file;
+    ParseFullFileNumber(f.number, &tablet, &file);
+    AppendNumberTo(&r, tablet);
+    r.append(":");
+    AppendNumberTo(&r, file);
     r.append(" ");
     AppendNumberTo(&r, f.file_size);
     r.append(" ");
