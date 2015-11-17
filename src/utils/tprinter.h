@@ -21,9 +21,12 @@ namespace tera {
 class TPrinter {
 public:
     struct PrintOpt {
-    public:
         // if print table header
         bool print_head;
+        // if print average row
+        bool print_avg;
+        // if print sum row
+        bool print_sum;
         // >0 for ascending order, <0 for decending order
         int  sort_dir;
         // select column num for sorting
@@ -31,9 +34,20 @@ public:
         // select column name for sorting
         string sort_col_name;
 
-        PrintOpt()
-            : print_head(true), sort_dir(0),
-              sort_col_num(0), sort_col_name("") {}
+        PrintOpt();
+    };
+
+    class Line {
+    public:
+        size_t size() { return cells_.size(); }
+        void push_back (int64_t cell);
+        void push_back (double cell);
+        void push_back (const string& cell);
+        void push_back (Cell& cell);
+        Cell& operator[](int offset) { return cells_[i]; }
+
+    private:
+        std::vector<Cell> cells_;
     };
 
     TPrinter();
@@ -52,41 +66,48 @@ public:
     void Reset(const std::vector<string>& head);
 
 private:
-    enum CellType {
-        INT,
-        DOUBLE,
-        STRING
-    };
-    struct Cell {
-        CellType type;
+    enum Type {
+        INT = 0x10,
+        INT_K = 0x11,
+        INT_KI = 0x12,
+        DOUBLE = 0x20,
+        STRING = 0x30
+    }
+    class Cell {
+    public:
+        Cell (int64_t v) { value.i = v; type = C_INT; }
+        Cell (double  v) { value.d = v; type = C_DOUBLE; }
+        Cell (const string& v) { value.s = new string(v); type = C_STRING; }
+        Cell (const Cell& ref) { *this = ref; }
+        ~Cell () { if (type == C_STRING) delete value.s; }
+
+        string ToString(Type type);
+
+        Cell& operator=(const Cell& ref);
+
+    private:
+        enum CellType { C_INT, C_DOUBLE, C_STRING };
+        CellType type_;
         union {
             int64_t i;
             double  d;
             string* s;
-        } value;
-
-        string ToString();
-
-        Cell (int64_t v,       CellType t) { value.i = v; type = t; }
-        Cell (double  v,       CellType t) { value.d = v; type = t; }
-        Cell (const string& v, CellType t) { value.s = new string(v); type = t; }
-        Cell (const Cell& ref) { *this = ref; }
-        ~Cell () { if (type == STRING) delete value.s; }
-        Cell& operator=(const Cell& ref);
+        } value_;
     };
-    typedef std::vector<Cell> Line;
 
     // column format: "name<int[,unit]>"
     // e.g. "name<string>", "money<int,yuan>", "speed<int_1024,B>"
     bool ParseColType(const string& item, string* name,
-                      CellType* type, string* unit = NULL);
+                      Type* type, string* unit = NULL);
     void FormatOneLine(Line& ori, std::vector<string>* dst);
     static string NumToStr(const double num);
+    static string NumToStrK(const double num);
+    static string NumToStrKi(const double num);
 
 private:
     int cols_;
     std::vector<string> head_;
-    std::vector<CellType> type_;
+    std::vector<Type> type_;
     std::vector<string> unit_;
     std::vector<Line> body_;
     std::vector<size_t> col_width_;

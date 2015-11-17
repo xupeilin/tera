@@ -384,7 +384,17 @@ bool DBImpl::IsDbExist() {
     uint64_t number;
     FileType type;
     if (ParseFileName(files[i], &number, &type) && type == kDescriptorFile) {
-      is_manifest_exist = true;
+      std::string dscname = dbname_ + "/" + files[i];
+      uint64_t fsize = 0;
+      env_->GetFileSize(dscname, &fsize);
+      if (fsize == 0) {
+        // if CURRENT file not exist, empty MANIFEST is dangerous, delete it
+        Log(options_.info_log, "[%s] delete empty manifest: %s.",
+            dbname_.c_str(), dscname.c_str());
+        ArchiveFile(env_, dscname);
+      } else {
+        is_manifest_exist = true;
+      }
     }
   }
   if (is_manifest_exist) {
@@ -1697,10 +1707,10 @@ void DBImpl::GetApproximateSizes(uint64_t* size, std::vector<uint64_t>* lgsize) 
   // add mem&imm size
   if (size) {
     if (mem_) {
-      size += mem_->ApproximateMemoryUsage();
+      *size += mem_->ApproximateMemoryUsage();
     }
     if (imm_) {
-      size += imm_->ApproximateMemoryUsage();
+      *size += imm_->ApproximateMemoryUsage();
     }
   }
 }

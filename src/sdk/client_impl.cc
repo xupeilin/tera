@@ -19,6 +19,7 @@
 #include "sdk/sdk_utils.h"
 #include "sdk/sdk_zk.h"
 #include "utils/crypt.h"
+#include "utils/string_util.h"
 #include "utils/utils_cmd.h"
 
 DECLARE_string(tera_master_meta_table_name);
@@ -124,6 +125,12 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
 bool ClientImpl::CreateTable(const TableDescriptor& desc,
                              const std::vector<string>& tablet_delim,
                              ErrorCode* err) {
+    if (!IsValidTableName(desc.TableName())) {
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kBadParam, " invalid tablename ");
+        }
+        return false;
+    }
     master::MasterClient master_client(_cluster->MasterAddr());
 
     CreateTableRequest request;
@@ -507,47 +514,38 @@ bool ClientImpl::List(std::vector<TableInfo>* table_list, ErrorCode* err) {
                         0, err);
 }
 
+// show exactly one table
 bool ClientImpl::ShowTablesInfo(const string& name,
                                 TableMeta* meta,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
-    if (meta == NULL || tablet_list == NULL) {
-        return false;
-    }
-    tablet_list->Clear();
+    TableMetaList table_list;
     std::string internal_table_name;
     if (!GetInternalTableName(name, err, &internal_table_name)) {
         LOG(ERROR) << "faild to scan meta schema";
         return false;
     }
-    master::MasterClient master_client(_cluster->MasterAddr());
-
-    ShowTablesRequest request;
-    ShowTablesResponse response;
-    request.set_sequence_id(0);
-    request.set_start_table_name(internal_table_name);
-    request.set_max_table_num(1);
-    request.set_user_token(GetUserToken(_user_identity, _user_passcode));
-
-    if (master_client.ShowTables(&request, &response) &&
-        response.status() == kMasterOk) {
-        if (response.table_meta_list().meta_size() == 0) {
-            return false;
-        } else if (response.table_meta_list().meta(0).table_name() != internal_table_name) {
-            return false;
-        }
-        meta->CopyFrom(response.table_meta_list().meta(0));
-        tablet_list->CopyFrom(response.tablet_meta_list());
-        return true;
+    bool result = DoShowTablesInfo(&table_list, tablet_list, internal_table_name, err);
+    if ((table_list.meta_size() == 0)
+        || (table_list.meta(0).table_name() != internal_table_name)) {
+        return false;
     }
-    LOG(ERROR) << "fail to show table info: " << name;
-    err->SetFailed(ErrorCode::kSystem, StatusCodeToString(response.status()));
-    return false;
+    if (result) {
+        meta->CopyFrom(table_list.meta(0));
+    }
+    return result;
 }
 
 bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
                                 TabletMetaList* tablet_list,
                                 ErrorCode* err) {
+    return DoShowTablesInfo(table_list, tablet_list, "", err);
+}
+
+bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
+                                  TabletMetaList* tablet_list,
+                                  const string& table_name,
+                                  ErrorCode* err) {
     if (table_list == NULL || tablet_list == NULL) {
         return false;
     }
@@ -556,7 +554,7 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
 
     master::MasterClient master_client(_cluster->MasterAddr());
     std::string start_tablet_key;
-    std::string start_table_name;
+    std::string start_table_name = table_name; // maybe a empty string
     bool has_more = true;
     bool has_error = false;
     bool table_meta_copied = false;
@@ -564,6 +562,9 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
     while(has_more && !has_error) {
         ShowTablesRequest request;
         ShowTablesResponse response;
+        if (!table_name.empty()) {
+            request.set_max_table_num(1);
+        }
         request.set_start_table_name(start_table_name);
         request.set_start_tablet_key(start_tablet_key);
         request.set_max_tablet_num(FLAGS_tera_sdk_show_max_num); //tablets be fetched at most in one RPC
@@ -614,17 +615,18 @@ bool ClientImpl::ShowTablesInfo(TableMetaList* table_list,
 
     if (has_error) {
         LOG(ERROR) << "fail to show table info.";
-        err->SetFailed(ErrorCode::kSystem, err_msg);
+        if (err != NULL) {
+            err->SetFailed(ErrorCode::kSystem, err_msg);
+        }
         return false;
     }
     return true;
 }
 
-
 bool ClientImpl::ShowTabletNodesInfo(const string& addr,
-                                    TabletNodeInfo* info,
-                                    TabletMetaList* tablet_list,
-                                    ErrorCode* err) {
+                                     TabletNodeInfo* info,
+                                     TabletMetaList* tablet_list,
+                                     ErrorCode* err) {
     if (info == NULL || tablet_list == NULL) {
         return false;
     }
@@ -655,7 +657,7 @@ bool ClientImpl::ShowTabletNodesInfo(const string& addr,
 }
 
 bool ClientImpl::ShowTabletNodesInfo(std::vector<TabletNodeInfo>* infos,
-                                    ErrorCode* err) {
+                                     ErrorCode* err) {
     if (infos == NULL) {
         return false;
     }
@@ -808,7 +810,7 @@ bool ClientImpl::DelSnapshot(const string& name, uint64_t snapshot, ErrorCode* e
     return false;
 }
 
-bool ClientImpl::Rollback(const string& name, uint64_t snapshot, 
+bool ClientImpl::Rollback(const string& name, uint64_t snapshot,
                           const std::string& rollback_name, ErrorCode* err) {
     master::MasterClient master_client(_cluster->MasterAddr());
 

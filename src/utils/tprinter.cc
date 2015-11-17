@@ -238,7 +238,7 @@ void TPrinter::FormatOneLine(Line& ori, std::vector<string>* dst) {
     }
 }
 
-string TPrinter::NumToStr(const double num) {
+string TPrinter::NumToStr(const double num, Type type) {
     const int64_t kKB = 1000;
     const int64_t kMB = kKB * 1000;
     const int64_t kGB = kMB * 1000;
@@ -276,25 +276,58 @@ string TPrinter::NumToStr(const double num) {
     return string(buf);
 }
 
-string TPrinter::Cell::ToString() {
+TPrinter::PrintOpt::PrintOpt()
+    : print_head(true),
+      print_avg(false),
+      print_sum(false),
+      sort_dir(0),
+      sort_col_num(0),
+      sort_col_name("") {
+}
+
+string TPrinter::Cell::ToString(Type type) {
     switch (type) {
-    case INT:
+    case INT: {
+        if (type_ != C_INT) {
+            return "-"
+        }
         return NumToStr(value.i);
-    case DOUBLE:
-        return NumToStr(value.d);
-    case STRING:
+    }
+    case INT_K: {
+        if (type_ != C_INT) {
+            return "-"
+        }
+        return NumToStrK(value.i);
+    }
+    case INT_KI: {
+        if (type_ != C_INT) {
+            return "-"
+        }
+        return NumToStrKi(value.i);
+    }
+    case DOUBLE: {
+        if (type_ != C_DOUBLE) {
+            return "-"
+        }
+        return NumToStrK(value.d);
+    }
+    case STRING: {
+        if (type_ != C_STRING) {
+            return "-"
+        }
         return *value.s;
+    }
     default:
         abort();
     }
 }
 
 TPrinter::Cell& TPrinter::Cell::operator=(const TPrinter::Cell& ref) {
-    type = ref.type;
-    if (type == STRING && this != &ref) {
-        value.s = new string(*ref.value.s);
+    type_ = ref.type_;
+    if (type_ == STRING && this != &ref) {
+        value_.s = new string(*ref.value_.s);
     } else {
-        value = ref.value;
+        value_ = ref.value_;
     }
     return *this;
 }
