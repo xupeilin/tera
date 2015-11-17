@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 #include "db/filename.h"
 #include "db/log_reader.h"
@@ -30,14 +31,14 @@ namespace leveldb {
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-static int64_t MaxGrandParentOverlapBytes(int target_file_size) {
+static int64_t MaxGrandParentOverlapBytes(int64_t target_file_size) {
     return 10 * target_file_size;
 }
 
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static int64_t ExpandedCompactionByteSizeLimit(int target_file_size) {
+static int64_t ExpandedCompactionByteSizeLimit(int64_t target_file_size) {
     return 25 * target_file_size;
 }
 
@@ -53,7 +54,7 @@ static double MaxBytesForLevel(int level, int sst_size) {
   return result;
 }
 
-static uint64_t MaxFileSizeForLevel(int level, int target_file_size) {
+static uint64_t MaxFileSizeForLevel(int level, int64_t target_file_size) {
   if (level == 2) {
     return 2 * target_file_size;
   } else if(level > 2) {
@@ -554,44 +555,44 @@ bool Version::FindSplitKey(const Slice* smallest_user_key,
                            const Slice* largest_user_key,
                            double ratio,
                            std::string* split_key) {
-    assert(ratio >= 0 && ratio <= 1);
-    uint64_t size_under_level1;
-    GetApproximateSizes(NULL, &size_under_level1);
+  assert(ratio >= 0 && ratio <= 1);
+  uint64_t size_under_level1;
+  GetApproximateSizes(NULL, &size_under_level1);
 
-    uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
+  uint64_t want_split_size = static_cast<uint64_t>(size_under_level1 * ratio);
 
-    const Comparator* user_cmp = vset_->icmp_.user_comparator();
-    const FileMetaData* largest_file = NULL;
-    size_t split_size = 0;
-    size_t now_pos[config::kNumLevels] = {0};
-    while (split_size < want_split_size) {
-        largest_file = NULL;
-        int step_level = -1;
-        for (int level = 1; level < config::kNumLevels; level++) {
-            const std::vector<FileMetaData*>& files = files_[level];
-            if (now_pos[level] >= files.size()) {
-                continue;
-            }
-            const FileMetaData* file = files[now_pos[level]];
-            if (largest_file == NULL ||
-                user_cmp->Compare(largest_file->largest.user_key(),
-                                  file->largest.user_key()) > 0) {
-                largest_file = file;
-                step_level = level;
-            }
-        }
-        // when leveldb is empty
-        if (largest_file == NULL) {
-            return false;
-        }
-        split_size += files_[step_level][now_pos[step_level]]->file_size;
-        now_pos[step_level] ++;
+  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  const FileMetaData* largest_file = NULL;
+  size_t split_size = 0;
+  size_t now_pos[config::kNumLevels] = {0};
+  while (split_size < want_split_size) {
+    largest_file = NULL;
+    int step_level = -1;
+    for (int level = 1; level < config::kNumLevels; level++) {
+      const std::vector<FileMetaData*>& files = files_[level];
+      if (now_pos[level] >= files.size()) {
+        continue;
+      }
+      const FileMetaData* file = files[now_pos[level]];
+      if (largest_file == NULL ||
+        user_cmp->Compare(largest_file->largest.user_key(),
+                          file->largest.user_key()) > 0) {
+        largest_file = file;
+        step_level = level;
+      }
     }
+    // when leveldb is empty
     if (largest_file == NULL) {
-            return false;
+      return false;
     }
-    *split_key = largest_file->largest.user_key().ToString();
-    return true;
+    split_size += files_[step_level][now_pos[step_level]]->file_size;
+    now_pos[step_level] ++;
+  }
+  if (largest_file == NULL) {
+    return false;
+  }
+  *split_key = largest_file->largest.user_key().ToString();
+  return true;
 }
 
 //  end of tera-specific
@@ -1357,8 +1358,8 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-      score = v->files_[level].size() / 10 /
-          static_cast<double>(config::kL0_CompactionTrigger);
+      score = sqrt(v->files_[level].size() /
+                   static_cast<double>(config::kL0_CompactionTrigger));
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
