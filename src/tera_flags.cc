@@ -249,3 +249,5 @@ DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concu
 DEFINE_string(tera_ins_addr_list, "", "the ins cluster addr. e.g. abc.com:1234,abb.com:1234");
 DEFINE_string(tera_ins_root_path, "", "root path on ins. e.g /ps/sandbox");
 DEFINE_bool(tera_ins_enabled, false, "option to open ins naming");
+
+DEFINE_bool(tera_sdk_table_rename_enabled, false, "enable table rename");

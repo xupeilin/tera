@@ -40,6 +40,7 @@ DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
 DECLARE_int32(tera_sdk_rpc_work_thread_num);
 DECLARE_int32(tera_sdk_show_max_num);
+DECLARE_bool(tera_sdk_table_rename_enabled);
 
 namespace tera {
 
@@ -136,8 +137,13 @@ bool ClientImpl::CreateTable(const TableDescriptor& desc,
     CreateTableRequest request;
     CreateTableResponse response;
     request.set_sequence_id(0);
-    std::string timestamp = tera::get_curtime_str_plain();
-    std::string internal_table_name = desc.TableName() + "@" + timestamp;
+    std::string internal_table_name;
+    if (FLAGS_tera_sdk_table_rename_enabled) {
+        std::string timestamp = tera::get_curtime_str_plain();
+        internal_table_name = desc.TableName() + "@" + timestamp;
+    } else {
+        internal_table_name = desc.TableName();
+    }
     request.set_table_name(internal_table_name);
     request.set_user_token(GetUserToken(_user_identity, _user_passcode));
 
