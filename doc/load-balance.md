@@ -51,10 +51,15 @@ tera负载均衡由master完成，依赖tablet move操作，即从一个tabletno
 
 ### 读负载均衡
 
+  * 并不期待将所有tabletnode的读请求完全平均，只将读热点打散至可服务状态即可。
+  * 判定出现读热点：此tabletnode上发生读请求pending数目超过某阈值。
+
+要点：
+
   * 设置每次移动tablet数目上限，保证tablet的可用比例，及cache失效比例
   * 区分cache失效导致pending和cpu不足导致的pending，只对后者进行迁移
   * 迁移时每次选qps第二高的tablet，保证最忙tablet优先得到服务
-  * 每次均衡优先触发qps均衡，剩余迁移quota用于size均衡
-  * 将历史值加权加和至最新值中，平滑数据抖动
+  * 优先触发，剩余迁移quota用于size均衡
+  * 将历史负载值加权加和至最新值中，平滑负载抖动
 
 ### 数据量负载均衡
