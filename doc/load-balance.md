@@ -42,7 +42,7 @@ tera负载均衡由master完成，依赖tablet move操作，即从一个tabletno
 
 目标：从当前tabletnode->tablet的映射集合中通过策略选出部分需要移动的tablet，将其从原tabletnode中unload，并在负载较轻的tabletnode上load起来。
 
-每次负载均衡会有一个待迁移tablet总量控制，保证每次并不会迁移过多tablet。
+每次负载均衡会有一个待迁移tablet总量控制，保证每次并不会迁移过多tablet，可以保证任一时刻tablet的可用比例，以及cache失效比例。
 
 过程分为两阶段：
 
@@ -51,15 +51,16 @@ tera负载均衡由master完成，依赖tablet move操作，即从一个tabletno
 
 ### 读负载均衡
 
-  * 并不期待将所有tabletnode的读请求完全平均，只将读热点打散至可服务状态即可。
   * 判定出现读热点：此tabletnode上发生读请求pending数目超过某阈值。
-
-要点：
-
-  * 设置每次移动tablet数目上限，保证tablet的可用比例，及cache失效比例
+  * 并不期待将所有tabletnode的读请求完全平均，只将读热点打散至可服务状态即可。
   * 区分cache失效导致pending和cpu不足导致的pending，只对后者进行迁移
   * 迁移时每次选qps第二高的tablet，保证最忙tablet优先得到服务
   * 优先触发，剩余迁移quota用于size均衡
   * 将历史负载值加权加和至最新值中，平滑负载抖动
 
 ### 数据量负载均衡
+
+  * 判定需要迁移：最大与最小数据量tabletnode比值超过某阈值。
+  * 迁移前校验迁移结果，防止出现数据量反转，形成迁移的死循环。
+  * 迁移时选择最有可能将数据量均衡的tablet进行迁移，防止迁移过多小tablet。
+  * 在允许范围内可一次执行多轮，提高均衡较果。
