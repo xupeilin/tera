@@ -317,6 +317,9 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
     } else if (m_del_qual_ts > ts) {
         // skip deleted qualifier
         return true;
+    } else if (type == leveldb::TKT_DEL_COLUMN) {
+        // reach a delete-column mark
+        m_del_col_ts = ts;
     } else if (type == leveldb::TKT_DEL_QUALIFIERS) {
         // reach a delete-all-qualifier mark
         m_del_qual_ts = ts;
