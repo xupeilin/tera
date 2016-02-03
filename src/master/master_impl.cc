@@ -3327,9 +3327,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                     << "], size: " << meta.size()
                     << ", addr: " << meta.server_addr()
                     << ", status: " << meta.status();
-            } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)
-                && tablet->Verify(table_name, key_start, key_end, meta.path(),
-                                  meta.server_addr())) {
+            } else if (m_tablet_manager->FindTablet(table_name, key_start, &tablet)) {
                 if (tablet->GetTable()->GetStatus() == kTableDisable) {
                     if (tablet->SetStatusIf(kTableUnLoading, kTableReady)) {
                         UnloadClosure* done =
@@ -3341,7 +3339,24 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                         LOG(INFO) << "Discard disable tablet: " << tablet->GetPath()
                             << ", status: " << tablet->GetStatus();
                     }
+                    continue;
+                }
+
+                VLOG(30) << "caution: updatetime " << tablet->GetUpdateTime()
+                    << ", " << "last " << m_start_query_time;
+                if (tablet->GetUpdateTime() > m_start_query_time) {
+                    LOG(ERROR) << "caution: one tablet multi-loaded" << tablet;
+                }
+                if (!tablet->Verify(table_name, key_start, key_end, meta.path(),
+                                    meta.server_addr())) {
+                    LOG(WARNING) << "fail to verify tablet: " << meta.table_name()
+                        << ", path: " << meta.path()
+                        << ", range: [" << DebugString(key_start)
+                        << ", " << DebugString(key_end)
+                        << "], size: " << meta.size()
+                        << ", addr: " << meta.server_addr();
                 } else {
+                    tablet->SetUpdateTime(get_micros());
                     tablet->UpdateSize(meta);
                     tablet->SetCounter(counter);
                     tablet->SetCompactStatus(meta.compact_status());
@@ -3349,7 +3364,7 @@ void MasterImpl::QueryTabletNodeCallback(std::string addr, QueryRequest* request
                 }
                 VLOG(30) << "[query] " << tablet;
             } else {
-                LOG(WARNING) << "fail to match tablet: " << meta.table_name()
+                LOG(WARNING) << "fail to find tablet: " << meta.table_name()
                     << ", path: " << meta.path()
                     << ", range: [" << DebugString(key_start)
                     << ", " << DebugString(key_end)

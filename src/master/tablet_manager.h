@@ -80,6 +80,8 @@ public:
     std::string GetServerId();
     std::string GetExpectServerAddr();
     TablePtr GetTable();
+    int64_t GetUpdateTime();
+    void SetUpdateTime(int64_t update_time);
     bool IsBusy();
     std::string DebugString();
 
@@ -128,6 +130,7 @@ private:
                                   TabletStatus new_status);
 
     mutable Mutex m_mutex;
+    int64_t m_update_time;
     TabletMeta m_meta;
     TablePtr m_table;
     std::string m_server_id;

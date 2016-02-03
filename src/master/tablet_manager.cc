@@ -57,12 +57,16 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet() {}
+Tablet::Tablet() : m_update_time(0) {}
 
-Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
+Tablet::Tablet(const TabletMeta& meta)
+    : m_update_time(0),
+      m_meta(meta) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
-    : m_meta(meta), m_table(table) {}
+    : m_update_time(0),
+      m_meta(meta),
+      m_table(table) {}
 
 Tablet::~Tablet() {
     m_table.reset();
@@ -161,6 +165,15 @@ std::string Tablet::GetExpectServerAddr() {
 
 TablePtr Tablet::GetTable() {
     return m_table;
+}
+
+int64_t Tablet::GetUpdateTime() {
+    return m_update_time;
+}
+
+void Tablet::SetUpdateTime(int64_t update_time) {
+    MutexLock lock(&m_mutex);
+    m_update_time = update_time;
 }
 
 bool Tablet::IsBusy() {
