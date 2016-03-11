@@ -36,6 +36,88 @@ void DefaultCompactStrategy::SetSnapshot(uint64_t snapshot) {
     m_snapshot = snapshot;
 }
 
+
+bool DefaultCompactStrategy::InternalDrop(const Slice& tera_key, uint64_t n) {
+    Slice key, col, qual;
+    int64_t ts = -1;
+    leveldb::TeraKeyType type;
+
+    if (!m_raw_key_operator->ExtractTeraKey(tera_key, &key, &col, &qual, &ts, &type)) {
+        LOG(WARNING) << "invalid tera key: " << tera_key.ToString();
+        return true;
+    }
+
+    m_cur_type = type;
+    m_cur_ts = ts;
+    int32_t cf_id = -1;
+    if (type != leveldb::TKT_DEL && DropIllegalColumnFamily(col.ToString(), &cf_id)) {
+        // drop illegal column family
+        return true;
+    }
+
+    if (type >= leveldb::TKT_VALUE && DropByLifeTime(cf_id, ts)) {
+        // drop illegal column family
+        return true;
+    }
+
+    if (key.compare(m_last_key) != 0) {
+        // reach a new row
+        m_last_key.assign(key.data(), key.size());
+        m_last_col.assign(col.data(), col.size());
+        m_last_qual.assign(qual.data(), qual.size());
+        m_del_row_ts = m_del_col_ts = m_del_qual_ts = -1;
+        m_version_num = 0;
+        m_has_put = false;
+    } else if (col.compare(m_last_col) != 0) {
+        // reach a new column family
+        m_last_col.assign(col.data(), col.size());
+        m_last_qual.assign(qual.data(), qual.size());
+        m_del_col_ts = m_del_qual_ts = -1;
+        m_version_num = 0;
+        m_has_put = false;
+    } else if (qual.compare(m_last_qual) != 0) {
+        // reach a new qualifier
+        m_last_qual.assign(qual.data(), qual.size());
+        m_del_qual_ts = -1;
+        m_version_num = 0;
+        m_has_put = false;
+    }
+
+    if (type == leveldb::TKT_VALUE) {
+        m_has_put = true;
+        if (n <= m_snapshot) {
+            if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
+                // drop out-of-range version
+                return true;
+            }
+        }
+    }
+
+    // no break in switch: need to set multiple variables
+    switch (type) {
+        case leveldb::TKT_DEL:
+            m_del_row_ts = ts;
+        case leveldb::TKT_DEL_COLUMN:
+            m_del_col_ts = ts;
+        case leveldb::TKT_DEL_QUALIFIERS:
+            m_del_qual_ts = ts;
+        default:;
+    }
+
+    if (key.compare(m_last_key) == 0) {
+        if (m_del_row_ts >= ts) {
+            // skip deleted row and the same row_del mark
+            return true;
+        }
+
+    }
+    if (IsAtomicOP(type) && m_has_put) {
+        // drop ADDs which is later than Put
+        return true;
+    }
+
+}
+
 bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
                                   const std::string& lower_bound) {
     Slice key, col, qual;

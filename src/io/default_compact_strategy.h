@@ -39,8 +39,10 @@ public:
                                 std::string* merged_key);
 
 private:
+    bool InternalDrop(const Slice& k, uint64_t n);
+
     bool DropIllegalColumnFamily(const std::string& column_family,
-                            int32_t* cf_idx = NULL) const;
+                                 int32_t* cf_idx = NULL) const;
     bool DropByLifeTime(int32_t cf_idx, int64_t timestamp) const;
 
     bool InternalMergeProcess(leveldb::Iterator* it, std::string* merged_value,
