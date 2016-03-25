@@ -4,6 +4,7 @@
 
 **目录**
   1. [主要数据结构](#main_data_structure)
+  2. [主要功能及代码示例](#sample_code)
 
 # 1. [主要数据结构](id:main_data_structure)
 
@@ -63,7 +64,7 @@
 
 很多操作会返回，注意检查。
 
-# 2. 主要功能及代码示例
+# 2. [主要功能及代码示例](id:sample_code)
 
 ```
 // tera的统一操作，可以传入指定配置，默认会依次从./tera.flag、../conf/tera.flag、TERA_CONF环境变量查找
