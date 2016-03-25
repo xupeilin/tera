@@ -3,10 +3,10 @@
 [Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
 **目录**
-  1. [主要数据结构](#main_data_structure)
-  2. [主要功能及代码示例](#sample_code)
+  1. [主要数据结构](#main-data-structure)
+  2. [主要功能及代码示例](#sample-code)
 
-# 1. [主要数据结构](id:main_data_structure)
+# 1. [主要数据结构](main-data-structure)
 
 ##### (1) tera::Client 访问tera服务主结构
 
@@ -64,7 +64,7 @@
 
 很多操作会返回，注意检查。
 
-# 2. [主要功能及代码示例](id:sample_code)
+# 2. [主要功能及代码示例](id:sample-code)
 
 ```
 // tera的统一操作，可以传入指定配置，默认会依次从./tera.flag、../conf/tera.flag、TERA_CONF环境变量查找
