@@ -1,8 +1,11 @@
-# Tera SDK 开发指南
+# Tera SDK 主要api使用方法
 
 [Java SDK从这进入](https://github.com/baidu/tera/blob/master/doc/sdk_dev_guide_for_java.md)
 
-# 1. 主要数据结构
+**目录**
+  1. [主要数据结构](#main_data_structure)
+
+# 1. [主要数据结构](id:main_data_structure)
 
 ##### (1) tera::Client 访问tera服务主结构
 
