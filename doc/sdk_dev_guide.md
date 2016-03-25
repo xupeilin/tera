@@ -64,7 +64,8 @@
 
 很多操作会返回，注意检查。
 
-# 2. [主要功能及代码示例](id:sample-code)
+<a name="sample-code"></a>
+# 2. 主要功能及代码示例
 
 ```
 // tera的统一操作，可以传入指定配置，默认会依次从./tera.flag、../conf/tera.flag、TERA_CONF环境变量查找
