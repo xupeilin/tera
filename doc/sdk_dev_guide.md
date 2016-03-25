@@ -60,7 +60,7 @@
 
 建表及更新表格结构时使用，通过这些描述符定义表格的各种结构及其属性。
 
-##### (7) tera::ErrorCode
+#### (7) tera::ErrorCode
 
 很多操作会返回，注意检查。
 
@@ -79,7 +79,7 @@ delete client;                        // 注意回收内存
 
 ## 表格管理
 
-##### 表格描述符
+#### 表格描述符
 
 ```
 // create 名为 hello 的表格，包含一个LocalityGroup：lg_1，lg_1 中有一个ColumnFamily：cf_11
@@ -133,7 +133,7 @@ client->List("hello", &table_info, &tablet_list, &error_code);
 tera::Table* table =  client->OpenTable("hello", &error_code);
 ```
 
-##### 读
+#### 读
 ```
 // 同步单条读出数据（简单，性能较低）
 std::string value;
