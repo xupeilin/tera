@@ -21,6 +21,7 @@ Options::Options()
       info_log(NULL),
       write_buffer_size(4 << 20),
       l0_slowdown_writes_trigger(10),
+      l0_stop_writes_trigger(20000),
       max_open_files(1000),
       table_cache(NULL),
       block_cache(NULL),

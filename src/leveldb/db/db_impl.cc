@@ -1606,7 +1606,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       break;
     } else if (
         allow_delay &&
-        versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
+        versions_->NumLevelFiles(0) >= options_.l0_slowdown_writes_trigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
@@ -1629,7 +1629,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       Log(options_.info_log, "[%s] Current memtable full; waiting...\n",
           dbname_.c_str());
       bg_cv_.Wait();
-    } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
+    } else if (versions_->NumLevelFiles(0) >= options_.l0_stop_writes_trigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "[%s] Too many L0 files; waiting...\n",
           dbname_.c_str());
@@ -1787,8 +1787,8 @@ MemTable* DBImpl::NewMemTable() const {
         return new MemTable(internal_comparator_,
                   options_.enable_strategy_when_get ? options_.compact_strategy_factory : NULL);
     } else {
-        Logger* info_log = NULL;
-        // Logger* info_log = options_.info_log;
+        // Logger* info_log = NULL;
+        Logger* info_log = options_.info_log;
         return new MemTableOnLevelDB(internal_comparator_,
                                      options_.compact_strategy_factory,
                                      options_.memtable_ldb_write_buffer_size,

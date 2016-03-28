@@ -146,9 +146,10 @@ struct Options {
   // Default: 4MB
   size_t write_buffer_size;
 
-  // Soft limit on number of level-0 files.
+  // Soft&hard limit on number of level-0 files.
   // BusyWrite return true at this point.
   int l0_slowdown_writes_trigger;
+  int l0_stop_writes_trigger;
 
   // Number of open files that can be used by the DB.  You may need to
   // increase this if your database has a large working set (budget

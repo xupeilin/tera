@@ -896,6 +896,10 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
         if (compact_strategy->ScanDrop(it->key(), 0)) {
             // skip drop record
+            VLOG(10) << "ll-scan: drop true, key=[" << DebugString(key.ToString())
+                << "] column=[" << DebugString(col.ToString())
+                << ":" << DebugString(qual.ToString())
+                << "] ts=[" << ts << "] type=[" << type << "]";
             it->Next();
             continue;
         }

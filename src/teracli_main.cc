@@ -2190,25 +2190,7 @@ int32_t ProcessMeta(const std::string& op, const TableMetaList& table_list,
         const tera::TableMeta& meta = table_list.meta(i);
         if (op == "show") {
             std::cout << "table: " << meta.table_name() << std::endl;
-            int32_t lg_size = meta.schema().locality_groups_size();
-            for (int32_t lg_id = 0; lg_id < lg_size; lg_id++) {
-                const tera::LocalityGroupSchema& lg =
-                    meta.schema().locality_groups(lg_id);
-                std::cout << " lg" << lg_id << ": " << lg.name() << " ("
-                    << lg.store_type() << ", "
-                    << lg.compress_type() << ", "
-                    << lg.block_size() << ")" << std::endl;
-            }
-            int32_t cf_size = meta.schema().column_families_size();
-            for (int32_t cf_id = 0; cf_id < cf_size; cf_id++) {
-                const tera::ColumnFamilySchema& cf =
-                    meta.schema().column_families(cf_id);
-                std::cout << " cf" << cf_id << ": " << cf.name() << " ("
-                    << cf.locality_group() << ", "
-                    << cf.type() << ", "
-                    << cf.max_versions() << ", "
-                    << cf.time_to_live() << ")" << std::endl;
-            }
+            ShowTableSchema(meta.schema(), true);
         }
         if (op == "backup" || op == "repair") {
             WriteTable(meta, bak);
@@ -2728,6 +2710,10 @@ int main(int argc, char* argv[]) {
         LOG(ERROR) << "client instance not exist";
         return -1;
     }
+    Counter c;
+    LOG(ERROR) << c.Add(1);
+    LOG(ERROR) << c.Add(2);
+    LOG(ERROR) << c.Add(3);
 
     int ret  = 0;
     if (argc == 1) {

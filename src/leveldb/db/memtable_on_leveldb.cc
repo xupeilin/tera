@@ -34,6 +34,8 @@ MemTableOnLevelDB::MemTableOnLevelDB(const InternalKeyComparator& comparator,
     opts.dump_mem_on_shutdown = false;
     opts.drop_base_level_del_in_compaction = false;
     opts.info_log = info_log;
+    opts.l0_slowdown_writes_trigger = 10;
+    opts.l0_stop_writes_trigger = 20;
 
     DBImpl* db_impl = new DBImpl(opts, memdb_name);
     VersionEdit edit;

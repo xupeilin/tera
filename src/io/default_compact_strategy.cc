@@ -138,9 +138,9 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
         if (n <= m_snapshot) {
             if (++m_version_num > static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
                 // drop out-of-range version
-                VLOG(20) << "compact drop true: " << key.ToString()
+                VLOG(20) << "compact drop true: " << key.ToString() << " : " << col.ToString()
                     << ", version " << m_version_num
-                    << ", timestamp " << ts;
+                    << ", timestamp " << ts << ", type " << type;
                 return true;
             }
         }
@@ -148,11 +148,14 @@ bool DefaultCompactStrategy::Drop(const Slice& tera_key, uint64_t n,
 
     if (IsAtomicOP(type) && m_has_put) {
         // drop ADDs which is later than Put
+        VLOG(20) << "compact drop true: " << key.ToString() << " : " << col.ToString()
+            << ", version " << m_version_num
+            << ", timestamp " << ts << ", type " << type;
         return true;
     }
-    VLOG(20) << "compact drop false: " << key.ToString()
+    VLOG(20) << "compact drop false: " << key.ToString() << " : " << col.ToString()
         << ", version " << m_version_num
-        << ", timestamp " << ts;
+        << ", timestamp " << ts << ", type " << type;
     return false;
 }
 
@@ -360,13 +363,13 @@ bool DefaultCompactStrategy::ScanDrop(const Slice& tera_key, uint64_t n) {
         if (m_version_num >
             static_cast<uint32_t>(m_schema.column_families(cf_id).max_versions())) {
             // drop out-of-range version
-            VLOG(20) << "scan drop true: " << key.ToString()
+            VLOG(30) << "scan drop true: " << key.ToString()
                 << ", version " << m_version_num
                 << ", timestamp " << ts;
             return true;
         }
     }
-    VLOG(20) << "scan drop false: " << key.ToString()
+    VLOG(30) << "scan drop false: " << key.ToString()
         << ", version " << m_version_num
         << ", timestamp " << ts;
     return false;

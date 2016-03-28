@@ -411,6 +411,47 @@ void TabletNodeImpl::Update(const UpdateRequest* request,
     }
 }
 
+bool CheckReadResult(const ReadTabletRequest* request,
+                     const ReadTabletResponse* response) {
+    int32_t row_num = request->row_info_list_size();
+    int32_t row_num_t = response->detail().status_size();
+    if (row_num_t != row_num) {
+        LOG(ERROR) << "[CheckReadResult] status size error: " << row_num_t
+            << ", should be: " << row_num;
+        return false;
+    }
+    int32_t i_req = 0;
+    int32_t i_res = 0;
+    bool have_error = false;
+    for (i_req = 0; i_req < row_num; ++i_req) {
+        StatusCode status = response->detail().status(i_req);
+        if (status != kTabletNodeOk) {
+            continue;
+        }
+        const std::string& key = request->row_info_list(i_req).key();
+        const RowResult& result = response->detail().row_result(i_res);
+        int32_t res_size = result.key_values_size();
+        for (int32_t i = 0; i < res_size; ++i) {
+            const std::string& key_t = result.key_values(i).key();
+            if (key_t != key) {
+                LOG(ERROR) << "[CheckReadResult] result key error: " << key_t
+                    << ", should be " << key;
+                have_error = true;
+            }
+        }
+        i_res++;
+    }
+    if (have_error) {
+        return false;
+    }
+    if (i_res != response->detail().row_result_size()) {
+        LOG(ERROR) << "[CheckReadResult] result kv num error: " << i_res
+            << ", should be " << response->detail().row_result_size() - 1;
+        return false;
+    }
+    return true;
+}
+
 void TabletNodeImpl::ReadTablet(int64_t start_micros,
                                 const ReadTabletRequest* request,
                                 ReadTabletResponse* response,
@@ -437,6 +478,11 @@ void TabletNodeImpl::ReadTablet(int64_t start_micros,
             tablet_io->DecRef();
             response->mutable_detail()->add_status(row_status);
         }
+    }
+
+    // for debug
+    if (!CheckReadResult(request, response)) {
+        LOG(ERROR) << "read result illegal!!";
     }
 
     VLOG(10) << "seq_id: " << request->sequence_id()
