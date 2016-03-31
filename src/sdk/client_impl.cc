@@ -20,6 +20,7 @@
 #include "sdk/sdk_zk.h"
 #include "utils/config_utils.h"
 #include "utils/crypt.h"
+#include "utils/schema_utils.h"
 #include "utils/string_util.h"
 #include "utils/utils_cmd.h"
 
@@ -42,6 +43,7 @@ DECLARE_int32(tera_sdk_rpc_limit_max_outflow);
 DECLARE_int32(tera_sdk_rpc_max_pending_buffer_size);
 DECLARE_int32(tera_sdk_rpc_work_thread_num);
 DECLARE_int32(tera_sdk_show_max_num);
+DECLARE_bool(tera_online_schema_update_enabled);
 
 namespace tera {
 
@@ -117,7 +119,7 @@ bool ClientImpl::CheckReturnValue(StatusCode status, std::string& reason, ErrorC
             err->SetFailed(ErrorCode::kOK, reason);
             break;
         default:
-            reason = "tera master is not ready, please wait..";
+            reason = "unknown system error, contact to cluster admin...";
             err->SetFailed(ErrorCode::kSystem, reason);
             break;
     }
@@ -187,6 +189,33 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
     TableSchema* schema = request.mutable_schema();
     TableDescToSchema(desc, schema);
 
+    ErrorCode err2;
+    TableDescriptor* old_desc = GetTableDescriptor(desc.TableName(), &err2);
+    if (old_desc == NULL) {
+        return false;
+    }
+    TableSchema old_schema;
+    TableDescToSchema(*old_desc, &old_schema);
+    delete old_desc;
+
+    // if try to update lg, need to disable table
+    bool is_update_lg = IsSchemaLgDiff(*schema, old_schema);
+    bool is_update_cf = IsSchemaCfDiff(*schema, old_schema);
+
+    // compatible for old-master which no support for online-schema-update
+    if (!FLAGS_tera_online_schema_update_enabled
+        && IsTableEnabled(desc.TableName(), err)
+        && (is_update_lg || is_update_cf)) {
+        err->SetFailed(ErrorCode::kBadParam, "disable this table if you want to update (Lg | Cf) property(ies)");
+        return false;
+    }
+
+    if (FLAGS_tera_online_schema_update_enabled && is_update_lg
+        && IsTableEnabled(desc.TableName(), err)) {
+        err->SetFailed(ErrorCode::kBadParam, "disable this table if you want to update Lg property(ies)");
+        return false;
+    }
+
     string reason;
     if (master_client.UpdateTable(&request, &response)) {
         if (CheckReturnValue(response.status(), reason, err)) {
@@ -194,7 +223,7 @@ bool ClientImpl::UpdateTable(const TableDescriptor& desc, ErrorCode* err) {
         }
         LOG(ERROR) << reason << "| status: " << StatusCodeToString(response.status());
     } else {
-        reason = "rpc fail to create table:" + desc.TableName();
+        reason = "rpc fail to update table:" + desc.TableName();
         LOG(ERROR) << reason;
         err->SetFailed(ErrorCode::kSystem, reason);
     }
@@ -606,8 +635,14 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
                 has_more = false;
             }
             for(int i = 0; i < response.tablet_meta_list().meta_size(); i++){
-                tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
-                tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                const std::string& table_name = response.tablet_meta_list().meta(i).table_name();
+                const std::string& tablet_key = response.tablet_meta_list().meta(i).key_range().key_start();
+                // compatible to old master
+                if (table_name > start_table_name
+                    || (table_name == start_table_name && tablet_key >= start_tablet_key)) {
+                    tablet_list->add_meta()->CopyFrom(response.tablet_meta_list().meta(i));
+                    tablet_list->add_counter()->CopyFrom(response.tablet_meta_list().counter(i));
+                }
                 if (i == response.tablet_meta_list().meta_size() - 1 ) {
                     std::string prev_table_name = start_table_name;
                     start_table_name = response.tablet_meta_list().meta(i).table_name();
@@ -630,8 +665,9 @@ bool ClientImpl::DoShowTablesInfo(TableMetaList* table_list,
             }
             has_more = false;
         }
-        VLOG(16) << "fetch meta:" << start_table_name
-                 << " / " << start_tablet_key;
+        VLOG(16) << "fetch meta table name: " << start_table_name
+                 << " tablet size: " << response.tablet_meta_list().meta_size()
+                 << " next start: " << DebugString(start_tablet_key);
     };
 
     if (has_error) {
@@ -1030,7 +1066,8 @@ static int InitFlags(const std::string& confpath, const std::string& log_prefix)
     if (!confpath.empty() && IsExist(confpath)){
         flagfile = confpath;
     } else if(!confpath.empty() && !IsExist(confpath)){
-        LOG(ERROR) << "specified config file(function argument) not found";
+        LOG(ERROR) << "specified config file(function argument) not found: "
+            << confpath;
         return -1;
     } else if (!FLAGS_tera_sdk_conf_file.empty() && IsExist(confpath)) {
         flagfile = FLAGS_tera_sdk_conf_file;

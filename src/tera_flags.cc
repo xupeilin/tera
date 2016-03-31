@@ -29,6 +29,7 @@ DEFINE_int32(tera_zk_retry_max_times, 10, "zookeeper operation max retry times")
 DEFINE_string(tera_zk_lib_log_path, "../log/zk.log", "zookeeper library log output file");
 DEFINE_string(tera_log_prefix, "", "prefix of log file (INFO, WARNING)");
 DEFINE_string(tera_local_addr, "", "local host's ip address");
+DEFINE_bool(tera_online_schema_update_enabled, false, "enable online-schema-update");
 
 /////////  io  /////////
 
@@ -64,7 +65,7 @@ DEFINE_int32(tera_memenv_block_cache_size, 20, "block cache size for leveldb whi
 
 DEFINE_string(tera_leveldb_compact_strategy, "default", "the default strategy to drive consum compaction, should be [default|LG|dummy]");
 DEFINE_bool(tera_leveldb_verify_checksums, true, "enable verify data read from storage against checksums");
-DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, true, "skip corruption blocks of sst file in compaction");
+DEFINE_bool(tera_leveldb_ignore_corruption_in_compaction, false, "skip corruption blocks of sst file in compaction");
 
 DEFINE_int64(tera_io_scan_stream_task_max_num, 5000, "the max number of concurrent rpc task");
 DEFINE_int64(tera_io_scan_stream_task_pending_time, 180, "the max pending time (in sec) for timeout and interator cleaning");
@@ -109,6 +110,9 @@ DEFINE_int32(tera_master_max_load_concurrency, 5, "the max concurrency of tablet
 DEFINE_int32(tera_master_max_move_concurrency, 50, "the max concurrency for move tablet");
 DEFINE_int32(tera_master_load_interval, 300, "the delay interval (in sec) for load tablet");
 
+DEFINE_int32(tera_master_schema_update_retry_period, 1, "the period (in second) to poll schema update");
+DEFINE_int32(tera_master_schema_update_retry_times, 60000, "the max retry times of syncing new schema to ts");
+
 // load balance
 DEFINE_bool(tera_master_move_tablet_enabled, true, "enable master to auto move tablet");
 DEFINE_bool(tera_master_meta_isolate_enabled, false, "enable master to reserve a tabletnode for meta");
@@ -143,6 +147,10 @@ DEFINE_int64(tera_master_stat_table_interval, 60, "interval of system status dum
 DEFINE_int64(tera_master_stat_table_splitsize, 100, "default split size of stat table");
 
 DEFINE_int32(tera_master_gc_period, 60000, "the period (in ms) for master gc");
+
+DEFINE_bool(tera_master_available_check_enabled, true, "whether execute availability check");
+DEFINE_int64(tera_master_not_available_threshold, 30, "the threshold (in s) of not available");
+DEFINE_int64(tera_master_available_check_period, 300, "the period (in s) of availability check");
 
 ///////// tablet node  /////////
 
@@ -194,6 +202,8 @@ DEFINE_int32(tera_tabletnode_cache_mem_size, 2048, "the maximal size (in KB) of 
 DEFINE_int32(tera_tabletnode_cache_disk_size, 1024, "the maximal size (in MB) of disk cache");
 DEFINE_int32(tera_tabletnode_cache_disk_filenum, 1, "the file num of disk cache storage");
 DEFINE_int32(tera_tabletnode_cache_log_level, 1, "the log level [0 - 5] for cache system (0: FATAL, 1: ERROR, 2: WARN, 3: INFO, 5: DEBUG).");
+DEFINE_int32(tera_tabletnode_cache_update_thread_num, 4, "thread num for update cache");
+DEFINE_bool(tera_tabletnode_cache_force_read_from_cache, true, "force update cache before any read");
 DEFINE_int32(tera_tabletnode_gc_log_level, 15, "the vlog level [0 - 16] for cache gc.");
 
 DEFINE_bool(tera_tabletnode_tcm_cache_release_enabled, true, "enable the timer to release tcmalloc cache");
@@ -244,6 +254,8 @@ DEFINE_int32(tera_sdk_cookie_update_interval, 600, "the interval of cookie updat
 DEFINE_bool(tera_sdk_perf_counter_enabled, true, "enable performance counter log");
 DEFINE_int64(tera_sdk_perf_counter_log_interval, 1, "the interval of performance counter log dumping");
 
+DEFINE_int64(tera_sdk_scan_buffer_size, 65536, "default buffer limit for scan");
+DEFINE_int64(tera_sdk_scan_number_limit, 1000000000, "default number limit for scan");
 DEFINE_bool(tera_sdk_scan_async_enabled, false, "enable async scan");
 DEFINE_int64(tera_sdk_scan_async_cache_size, 16, "the max buffer size (in MB) for cached scan results");
 DEFINE_int32(tera_sdk_scan_async_parallel_max_num, 500, "the max number of concurrent task sending");

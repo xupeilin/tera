@@ -17,6 +17,7 @@
 #include "gflags/gflags.h"
 
 #include "master/gc_strategy.h"
+#include "master/availability.h"
 #include "master/tablet_manager.h"
 #include "master/tabletnode_manager.h"
 #include "master/user_manager.h"
@@ -152,6 +153,7 @@ private:
     typedef Closure<void, SnapshotRollbackRequest*, SnapshotRollbackResponse*, bool, int> RollbackClosure;
     typedef Closure<void, ReleaseSnapshotRequest*, ReleaseSnapshotResponse*, bool, int> DelSnapshotClosure;
     typedef Closure<void, QueryRequest*, QueryResponse*, bool, int> QueryClosure;
+    typedef Closure<void, UpdateRequest*, UpdateResponse*, bool, int> UpdateClosure;
     typedef Closure<void, LoadTabletRequest*, LoadTabletResponse*, bool, int> LoadClosure;
     typedef Closure<void, UnloadTabletRequest*, UnloadTabletResponse*, bool, int> UnloadClosure;
     typedef Closure<void, SplitTabletRequest*, SplitTabletResponse*, bool, int> SplitClosure;
@@ -402,7 +404,6 @@ private:
                                             bool failed, int error_code);
 
     void UpdateTableRecordForUpdateCallback(TablePtr table, int32_t retry_times,
-                                            const TableSchema* schema,
                                             UpdateTableResponse* rpc_response,
                                             google::protobuf::Closure* rpc_done,
                                             WriteTabletRequest* request,
@@ -452,6 +453,19 @@ private:
                                       WriteTabletRequest* request,
                                       WriteTabletResponse* response,
                                       bool failed, int error_code);
+
+    void UpdateSchemaCallback(std::string table_name,
+                              std::string tablet_path,
+                              std::string start_key,
+                              std::string end_key,
+                              int32_t retry_times,
+                              UpdateRequest* request,
+                              UpdateResponse* response,
+                              bool rpc_failed, int status_code);
+    void NoticeTabletNodeSchemaUpdatedAsync(TabletPtr tablet,
+                                            UpdateClosure* done);
+    void NoticeTabletNodeSchemaUpdated(TablePtr table);
+    void NoticeTabletNodeSchemaUpdated(TabletPtr tablet);
 
     // load metabale to master memory
     bool LoadMetaTable(const std::string& meta_tablet_addr,
@@ -535,6 +549,14 @@ private:
 
     void FillAlias(const std::string& key, const std::string& value);
     void RefreshTableCounter();
+
+    void DoAvailableCheck();
+    void ScheduleAvailableCheck();
+    void EnableAvailabilityCheck();
+    void DeleteTablet(TabletPtr tablet);
+    void CopyTableMetaToUser(TablePtr table, TableMeta* meta_ptr);
+    bool IsUpdateCf(TablePtr table);
+
 private:
     mutable Mutex m_status_mutex;
     MasterStatus m_status;
@@ -588,6 +610,8 @@ private:
     boost::shared_ptr<GcStrategy> gc_strategy;
     std::map<std::string, std::string> m_alias;
     mutable Mutex m_alias_mutex;
+
+    boost::shared_ptr<TabletAvailability> m_tablet_availability;
 };
 
 } // namespace master

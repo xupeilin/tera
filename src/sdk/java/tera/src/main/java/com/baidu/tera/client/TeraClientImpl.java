@@ -51,7 +51,7 @@ public class TeraClientImpl extends TeraBase {
         return createTable(tableName, "");
     }
 
-    public boolean dropTable(String tableName) throws Exception {
+    public boolean dropTable(String tableName) throws InterruptedException {
         VLOG(10, "drop table:" + tableName);
         int i = 60;
         while (i-- > 0) {

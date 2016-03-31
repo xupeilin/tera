@@ -93,6 +93,7 @@ TabletIO::~TabletIO() {
 }
 
 std::string TabletIO::GetTableName() const {
+    MutexLock lock(&m_schema_mutex);
     return m_table_schema.name();
 }
 
@@ -121,9 +122,19 @@ CompactStatus TabletIO::GetCompactStatus() const {
     return m_compact_status;
 }
 
-const TableSchema& TabletIO::GetSchema() const {
+void TabletIO::SetSchema(const TableSchema& schema) {
+    m_table_schema.CopyFrom(schema);
+}
+
+TableSchema TabletIO::GetSchema() const {
+    MutexLock lock(&m_schema_mutex);
     return m_table_schema;
 }
+
+RawKey TabletIO::RawKeyType() const {
+    MutexLock lock(&m_schema_mutex);
+    return m_table_schema.raw_key();
+};
 
 TabletIO::StatCounter& TabletIO::GetCounter() {
     return m_counter;
@@ -393,8 +404,8 @@ bool TabletIO::FindAverageKey(const std::string& start, const std::string& end,
 
 bool TabletIO::ParseRowKey(const std::string& tera_key, std::string* row_key) {
     leveldb::Slice row;
-    if ((m_table_schema.raw_key() == GeneralKv)
-        || (m_kv_only && m_table_schema.raw_key() == Readable)) {
+    if ((RawKeyType() == GeneralKv)
+        || (m_kv_only && RawKeyType() == Readable)) {
         row = tera_key;
     } else { // Table && TTL-KV
         if (!m_key_operator->ExtractTeraKey(tera_key, &row,
@@ -517,10 +528,13 @@ bool TabletIO::AddInheritedLiveFiles(std::vector<std::set<uint64_t> >* live) {
         }
         m_db_ref_count++;
     }
-    if (live->size() == 0) {
-        live->resize(m_table_schema.locality_groups_size());
-    } else {
-        CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
+    {
+        MutexLock lock(&m_schema_mutex);
+        if (live->size() == 0) {
+            live->resize(m_table_schema.locality_groups_size());
+        } else {
+            CHECK(live->size() == static_cast<uint64_t>(m_table_schema.locality_groups_size()));
+        }
     }
     m_db->AddInheritedLiveFiles(live);
     {
@@ -672,22 +686,148 @@ bool TabletIO::LowLevelScan(const std::string& start_tera_key,
     return ret;
 }
 
+
+bool TabletIO::ScanWithFilter(const ScanOptions& scan_options) {
+    return scan_options.filter_list.filter_size() != 0;
+}
+
+// 检测`row_buf'中的数据是否为一整行，`row_buf'为空是整行的特例，也返回true
+// 从LowLevelScan的for()循环中跳出时，leveldb::Iterator* it 指向第一个不在row_buf中的cell
+// 如果这个cell的rowkey和row_buf中的数据rowkey相同，
+// 则说明`row_buf'中的数据不是一整行，返回false
+// `row_buf'自身的逻辑保证了其中的所有cell必定属于同一行(row)
+bool TabletIO::IsCompleteRow(const std::list<KeyValuePair>& row_buf,
+                             leveldb::Iterator* it) {
+    assert((it != NULL) && (it->Valid()));
+    if (row_buf.size() == 0) {
+        VLOG(9) << "[filter] row_buf empty";
+        return true;
+    }
+    leveldb::Slice origin_cell = it->key();
+    leveldb::Slice cur_cell = it->key();
+    for (; it->Valid();) {
+        cur_cell = it->key();
+        leveldb::Slice row;
+        if (!m_key_operator->ExtractTeraKey(cur_cell, &row,
+                                            NULL, NULL, NULL, NULL)) {
+            LOG(ERROR) << "[filter] invalid tera key: " << DebugString(cur_cell.ToString());
+            it->Next();
+            continue;
+        }
+        if (cur_cell.compare(origin_cell) != 0) {
+            it->Seek(origin_cell);
+        }
+        bool res = row.compare(row_buf.begin()->key()) == 0;
+        VLOG(9) << "[filter] " << ( res ? "NOT " : "") << "complete row";
+        return !res;
+    }
+    if (cur_cell.compare(origin_cell) != 0) {
+        it->Seek(origin_cell);
+    }
+    VLOG(9) << "[filter] reach the end, row_buf is complete row";
+    return true;
+}
+
+// 检测是否应该过滤掉`row_buf'中cell所在的一整行(row)
+// 用户指定了一定数量的filter，针对某些特定列的值对row进行过滤，
+// 返回false表示不过滤这一行，这一行数据被返回给用户
+bool TabletIO::ShouldFilterRow(const ScanOptions& scan_options,
+                               const std::list<KeyValuePair>& row_buf,
+                               leveldb::Iterator* it) {
+    assert((it != NULL) && it->Valid());
+    if (row_buf.size() == 0) {
+        VLOG(9) << "[filter] row_buf empty";
+        return false;
+    }
+    std::string origin_row = row_buf.begin()->key();
+
+    leveldb::Slice origin_cell = it->key();
+
+    int filter_num = scan_options.filter_list.filter_size();
+
+    // TODO(taocipian)
+    // 0). some target cf maybe already in row_buf
+    // 1). collects all target cf and sorts them,
+    //     then Seek() to the 1st cf, Next() to the rest
+    for (int i = 0; i < filter_num; ++i) {
+        const Filter& filter = scan_options.filter_list.filter(i);
+        // 针对用户指定了过滤条件的每一列，seek过去看看是否符合
+        std::string target_cf = filter.content();
+        VLOG(9) << "[filter] " << i << " of " << filter_num
+                << " , target cf:" << target_cf;
+        std::string seek_key;
+        m_key_operator->EncodeTeraKey(origin_row, target_cf, "", kLatestTs,
+                                      leveldb::TKT_FORSEEK, &seek_key);
+        it->Seek(seek_key);
+        for (; it->Valid();) {
+            leveldb::Slice row, cf, qu;
+            int64_t ts;
+            if (!m_key_operator->ExtractTeraKey(it->key(), &row, &cf, &qu, &ts, NULL)) {
+                LOG(ERROR) << "[filter] invalid tera key: " << DebugString(it->key().ToString());
+                it->Next();
+                continue;
+            }
+            if ((row.ToString() != origin_row)
+                || (cf.ToString() != target_cf)
+                || (qu.ToString() != "")) {
+                // 用户试图过滤不存在的一列，忽略这个过滤条件
+                VLOG(9) << "[filter] target cf not found:" << target_cf;
+                break;
+            }
+            KeyValuePair pair;
+            leveldb::Slice value = it->value();
+            MakeKvPair(row, cf, qu, ts, value, &pair);
+            if (!CheckCell(pair, filter)) {
+                it->Seek(origin_cell);
+                VLOG(9) << "[filter] check failed at target cf:" << target_cf;
+                return true;
+            }
+            VLOG(9) << "[filter] target cf check passed";
+            break;
+        }
+    }
+    it->Seek(origin_cell);
+    VLOG(9) << "[filter] this row check passed";
+    return false;
+}
+
+// seek到`row_buf'中cell所在行(row)的下一行，
+// 调用者需要检查此函数返回以后迭代器的状态是否有效，
+// 因为可能已经到了数据库的最后
+void TabletIO::GotoNextRow(const std::list<KeyValuePair>& row_buf,
+                           leveldb::Iterator* it,
+                           KeyValuePair* next) {
+    assert(it != NULL);
+    if (!it->Valid() || row_buf.size() == 0) {
+        return;
+    }
+    std::string row = row_buf.begin()->key();
+    std::string next_row = row + '\0';
+    std::string seek_key;
+    m_key_operator->EncodeTeraKey(next_row, "", "", kLatestTs,
+                                  leveldb::TKT_FORSEEK, &seek_key);
+    it->Seek(seek_key);
+    MakeKvPair(leveldb::Slice(next_row), "", "", kLatestTs, "", next);
+    VLOG(9) << "[filter] goto next row:" << next_row << ":" << next_row.size();
+}
+
 inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
-                            const std::string& end_row_key,
-                            const ScanOptions& scan_options,
-                            leveldb::Iterator* it,
-                            RowResult* value_list,
-                            KeyValuePair* next_start_point,
-                            uint32_t* read_row_count,
-                            uint32_t* read_bytes,
-                            bool* is_complete,
-                            StatusCode* status) {
+                                   const std::string& end_row_key,
+                                   const ScanOptions& scan_options,
+                                   leveldb::Iterator* it,
+                                   RowResult* value_list,
+                                   KeyValuePair* next_start_point,
+                                   uint32_t* read_row_count,
+                                   uint32_t* read_bytes,
+                                   bool* is_complete,
+                                   StatusCode* status) {
     // init compact strategy
     leveldb::CompactStrategy* compact_strategy =
         m_ldb_options.compact_strategy_factory->NewInstance();
     std::list<KeyValuePair> row_buf;
     std::string last_key, last_col, last_qual;
     uint32_t buffer_size = 0;
+    int64_t number_limit = 0;
     uint32_t version_num = 1;
     uint64_t nr_scan_round = 0;
     value_list->clear_key_values();
@@ -782,7 +922,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         // begin to scan next row
         if (key.compare(last_key) != 0) {
             *read_row_count += 1;
-            ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
+            ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
             row_buf.clear();
         }
 
@@ -821,7 +961,7 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         row_buf.push_back(kv);
 
         // check scan buffer
-        if (buffer_size >= scan_options.max_size) {
+        if (buffer_size >= scan_options.max_size || number_limit >= scan_options.number_limit) {
             VLOG(10) << "stream scan, break scan context, version_num " << version_num
                 << ", key " << DebugString(key.ToString()) << ", col " << DebugString(col.ToString())
                 << ", qual " << DebugString(qual.ToString());
@@ -833,8 +973,15 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
         }
     }
 
-    // process the last row of tablet
-    ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size);
+    if (ScanWithFilter(scan_options)
+        && it->Valid()
+        && !IsCompleteRow(row_buf, it)
+        && ShouldFilterRow(scan_options, row_buf, it)) {
+        GotoNextRow(row_buf, it, &next_start_kv_pair);
+    } else {
+        // process the last row of tablet
+        ProcessRowBuffer(row_buf, scan_options, value_list, &buffer_size, &number_limit);
+    }
 
     leveldb::Status it_status;
     if (!it->Valid()) {
@@ -852,7 +999,9 @@ inline bool TabletIO::LowLevelScan(const std::string& start_tera_key,
 
     // check if scan finished
     SetStatusCode(kTableOk, status);
-    if (buffer_size < scan_options.max_size && now_time <= time_out) {
+    if ((buffer_size < scan_options.max_size) &&
+        (number_limit < scan_options.number_limit) &&
+        (now_time <= time_out)) {
         *is_complete = true;
     } else {
         if (now_time > time_out && next_start_point) {
@@ -1055,7 +1204,7 @@ bool TabletIO::ReadCells(const RowReaderInfo& row_reader, RowResult* value_list,
     if (m_kv_only) {
         std::string key(row_reader.key());
         std::string value;
-        if (m_table_schema.raw_key() == TTLKv) {
+        if (RawKeyType() == TTLKv) {
             key.append(8, '\0');
         }
         if (!Read(key, &value, snapshot_id, status)) {
@@ -1377,7 +1526,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
     // TTL-KV : m_key_operator::Compare会解RawKey([row_key | expire_timestamp])
     // 因此传递给Leveldb的Key一定要保证以expire_timestamp结尾.
     leveldb::CompactStrategy* strategy = NULL;
-    if (m_table_schema.raw_key() == TTLKv) {
+    if (RawKeyType() == TTLKv) {
         if (!start.empty()) {
             std::string start_key;
             m_key_operator->EncodeTeraKey(start, "", "", 0, leveldb::TKT_FORSEEK, &start_key);
@@ -1412,7 +1561,7 @@ bool TabletIO::Scan(const ScanOption& option, KeyValueList* kv_list,
         } else {
             if (!(strategy && strategy->ScanDrop(key, 0))) {
                 KeyValuePair* pair = kv_list->Add();
-                if (m_table_schema.raw_key() == TTLKv) {
+                if (RawKeyType() == TTLKv) {
                     pair->set_key(key.data(), key.size() - sizeof(int64_t));
                 } else {
                     pair->set_key(key.data(), key.size());
@@ -1494,6 +1643,9 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     if (request->has_buffer_limit()) {
         scan_options->max_size = request->buffer_limit();
     }
+    if (request->has_number_limit() && (request->number_limit() > 0)) {
+        scan_options->number_limit = request->number_limit();
+    }
     if (request->timeout()) {
         scan_options->timeout = request->timeout();
     }
@@ -1501,9 +1653,10 @@ void TabletIO::SetupScanRowOptions(const ScanTabletRequest* request,
     scan_options->snapshot_id = request->snapshot_id();
 }
 
+// no concurrent, so no lock on m_schema_mutex
 void TabletIO::SetupOptionsForLG() {
     if (m_kv_only) {
-        if (m_table_schema.raw_key() == TTLKv) {
+        if (RawKeyType() == TTLKv) {
             m_ldb_options.compact_strategy_factory =
                 new KvCompactStrategyFactory(m_table_schema);
         } else {
@@ -1645,6 +1798,7 @@ void TabletIO::IndexingCfToLG() {
 
 void TabletIO::SetupIteratorOptions(const ScanOptions& scan_options,
                                     leveldb::ReadOptions* leveldb_opts) {
+    MutexLock lock(&m_schema_mutex);
     std::set<uint32_t> target_lgs;
     std::set<std::string>::const_iterator cf_it = scan_options.iter_cf_set.begin();
     for (; cf_it != scan_options.iter_cf_set.end(); ++cf_it) {
@@ -1666,60 +1820,10 @@ void TabletIO::TearDownIteratorOptions(leveldb::ReadOptions* opts) {
     }
 }
 
-static bool CheckValue(const KeyValuePair& kv, const Filter& filter) {
-    int64_t v1 = *(int64_t*)kv.value().c_str();
-    int64_t v2 = *(int64_t*)filter.ref_value().c_str();
-    BinCompOp op = filter.bin_comp_op();
-    switch (op) {
-    case EQ:
-        return v1 == v2;
-        break;
-    case NE:
-        return v1 != v2;
-        break;
-    case LT:
-        return v1 < v2;
-        break;
-    case LE:
-        return v1 <= v2;
-        break;
-    case GT:
-        return v1 > v2;
-        break;
-    case GE:
-        return v1 >= v2;
-        break;
-    default:
-        LOG(ERROR) << "illegal compare operator: " << op;
-    }
-    return false;
-}
-
-static bool CheckCell(const KeyValuePair& kv, const Filter& filter) {
-    switch (filter.type()) {
-    case BinComp: {
-        if (filter.field() == ValueFilter) {
-            if (!CheckValue(kv, filter)) {
-                return false;
-            }
-        } else {
-            LOG(ERROR) << "only support value-compare.";
-        }
-        break;
-    }
-    default: {
-        LOG(ERROR) << "only support compare.";
-        break;
-    }}
-    return true;
-}
-
-void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
-                                const ScanOptions& scan_options,
-                                RowResult* value_list,
-                                uint32_t* buffer_size) {
+bool TabletIO::ShouldFilterRowBuffer(std::list<KeyValuePair>& row_buf,
+                                     const ScanOptions& scan_options) {
     if (row_buf.size() <= 0) {
-        return;
+        return true;
     }
     std::list<KeyValuePair>::iterator it;
     int filter_num = scan_options.filter_list.filter_size();
@@ -1735,14 +1839,29 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
             }
             if (filter.value_type() != kINT64) {
                 LOG(ERROR) << "only support int64 value.";
-                return;
+                return true;
             }
             if (!CheckCell(*it, filter)) {
-                return;
+                return true;
             }
         }
     }
+    return false;
+}
 
+void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
+                                const ScanOptions& scan_options,
+                                RowResult* value_list,
+                                uint32_t* buffer_size,
+                                int64_t* number_limit) {
+    if (row_buf.size() <= 0) {
+        return;
+    }
+    if (ShouldFilterRowBuffer(row_buf, scan_options)) {
+        return;
+    }
+
+    std::list<KeyValuePair>::iterator it;
     for (it = row_buf.begin(); it != row_buf.end(); ++it) {
         const std::string& key = it->key();
         const std::string& col = it->column_family();
@@ -1769,7 +1888,7 @@ void TabletIO::ProcessRowBuffer(std::list<KeyValuePair>& row_buf,
         }
 
         value_list->add_key_values()->CopyFrom(*it);
-
+        (*number_limit)++;
         *buffer_size += key.size() + col.size() + qual.size()
             + sizeof(ts) + value.size();
     }
@@ -1849,6 +1968,7 @@ uint64_t TabletIO::Rollback(uint64_t snapshot_id, StatusCode* status) {
 }
 
 uint32_t TabletIO::GetLGidByCFName(const std::string& cfname) {
+    MutexLock lock(&m_schema_mutex);
     std::map<std::string, uint32_t>::iterator it = m_cf_lg_map.find(cfname);
     if (it != m_cf_lg_map.end()) {
         return it->second;
@@ -1907,6 +2027,13 @@ int32_t TabletIO::DecRef() {
 
 int32_t TabletIO::GetRef() const {
     return m_ref_count;
+}
+
+void TabletIO::ApplySchema(const TableSchema& schema) {
+    MutexLock lock(&m_schema_mutex);
+    SetSchema(schema);
+    IndexingCfToLG();
+    m_ldb_options.compact_strategy_factory->SetArg(&schema);
 }
 
 } // namespace io

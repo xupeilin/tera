@@ -57,8 +57,6 @@ std::ostream& operator << (std::ostream& o, const TabletPtr& tablet) {
     return o;
 }
 
-Tablet::Tablet() {}
-
 Tablet::Tablet(const TabletMeta& meta) : m_meta(meta) {}
 
 Tablet::Tablet(const TabletMeta& meta, TablePtr table)
@@ -514,7 +512,10 @@ Table::Table(const std::string& table_name)
       m_status(kTableEnable),
       m_deleted_tablet_num(0),
       m_max_tablet_no(0),
-      m_create_time((int64_t)time(NULL)) {
+      m_create_time((int64_t)time(NULL)),
+      m_schema_is_syncing(false),
+      m_rangefragment(NULL),
+      m_old_schema(NULL) {
 }
 
 bool Table::FindTablet(const std::string& key_start, TabletPtr* tablet) {
@@ -651,6 +652,11 @@ void Table::ListRollback(std::vector<std::string>* rollback_names) {
     *rollback_names = m_rollback_names;
 }
 
+int64_t Table::GetTabletsCount() {
+    MutexLock lock(&m_mutex);
+    return m_tablets_list.size();
+}
+
 void Table::AddDeleteTabletCount() {
     MutexLock lock(&m_mutex);
     m_deleted_tablet_num++;
@@ -670,6 +676,29 @@ void Table::ToMetaTableKeyValue(std::string* packed_key,
     TableMeta meta;
     ToMeta(&meta);
     MakeMetaTableKeyValue(meta, packed_key, packed_value);
+}
+
+bool Table::PrepareUpdate(const TableSchema& schema) {
+    if (!GetSchemaSyncLockOrFailed()) {
+        return false;
+    }
+    TableSchema* origin_schema = new TableSchema;
+    origin_schema->CopyFrom(GetSchema());
+    SetOldSchema(origin_schema);
+    SetSchema(schema);
+    return true;
+}
+
+void Table::AbortUpdate() {
+    TableSchema old_schema;
+    if (GetOldSchema(&old_schema)) {
+        SetSchema(old_schema);
+        ClearOldSchema();
+    }
+}
+
+void Table::CommitUpdate() {
+    ClearOldSchema();
 }
 
 void Table::ToMeta(TableMeta* meta) {
@@ -729,6 +758,89 @@ bool Table::GetTabletsForGc(std::set<uint64_t>* live_tablets,
         return false;
     }
     return true;
+}
+
+bool Table::GetSchemaIsSyncing() {
+    MutexLock lock(&m_mutex);
+    return m_schema_is_syncing;
+}
+
+bool Table::GetSchemaSyncLockOrFailed() {
+    MutexLock lock(&m_mutex);
+    if (m_schema_is_syncing) {
+        return false;
+    }
+    m_schema_is_syncing = true;
+    return true;
+}
+
+void Table::SetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = schema;
+}
+
+bool Table::GetOldSchema(TableSchema* schema) {
+    MutexLock lock(&m_mutex);
+    if ((schema != NULL) && (m_old_schema != NULL)) {
+        schema->CopyFrom(*m_old_schema);
+        return true;
+    }
+    return false;
+}
+
+void Table::ClearOldSchema() {
+    MutexLock lock(&m_mutex);
+    delete m_old_schema;
+    m_old_schema = NULL;
+}
+
+void Table::ResetRangeFragment() {
+    MutexLock lock(&m_mutex);
+    delete m_rangefragment;
+    m_rangefragment = new RangeFragment;
+}
+
+RangeFragment* Table::GetRangeFragment() {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment;
+}
+
+bool Table::AddToRange(const std::string& start, const std::string& end) {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->AddToRange(start, end);
+}
+
+bool Table::IsCompleteRange() const {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->IsCompleteRange();
+}
+
+bool Table::IsSchemaSyncedAtRange(const std::string& start, const std::string& end) {
+    MutexLock lock(&m_mutex);
+    return m_rangefragment->IsCoverRange(start, end);
+}
+
+void Table::StoreUpdateRpc(UpdateTableResponse* response, google::protobuf::Closure* done) {
+    MutexLock lock(&m_mutex);
+    m_update_rpc_response = response;
+    m_update_rpc_done = done;
+}
+
+void Table::UpdateRpcDone() {
+    MutexLock lock(&m_mutex);
+    if (m_update_rpc_response != NULL) {
+        m_update_rpc_response->set_status(kMasterOk);
+        m_update_rpc_done->Run();
+
+        m_update_rpc_response = NULL;
+        m_update_rpc_done = NULL;
+    }
+}
+
+void Table::SetSchemaIsSyncing(bool flag) {
+    MutexLock lock(&m_mutex);
+    m_schema_is_syncing = flag;
 }
 
 void Table::RefreshCounter() {
@@ -921,6 +1033,16 @@ bool TabletManager::AddTablet(const std::string& table_name,
     return AddTablet(meta, schema, tablet, ret_status);
 }
 
+int64_t TabletManager::GetAllTabletsCount() {
+    MutexLock lock(&m_mutex);
+    int64_t count = 0;
+    TableList::iterator it;
+    for (it = m_all_tables.begin(); it != m_all_tables.end(); ++it) {
+        count += it->second->GetTabletsCount();
+    }
+    return count;
+}
+
 bool TabletManager::FindTablet(const std::string& table_name,
                                const std::string& key_start,
                                TabletPtr* tablet, StatusCode* ret_status) {
@@ -957,13 +1079,14 @@ bool TabletManager::FindTablet(const std::string& table_name,
 }
 
 void TabletManager::FindTablet(const std::string& server_addr,
-                               std::vector<TabletPtr>* tablet_meta_list) {
+                               std::vector<TabletPtr>* tablet_meta_list,
+                               bool all_tables) {
     m_mutex.Lock();
     TableList::iterator it = m_all_tables.begin();
     for (; it != m_all_tables.end(); ++it) {
         Table& table = *it->second;
         table.m_mutex.Lock();
-        if (table.m_status == kTableDisable) {
+        if (table.m_status == kTableDisable && !all_tables) {
             VLOG(10) << "FindTablet skip disable table: " << table.m_name;
             table.m_mutex.Unlock();
             continue;
