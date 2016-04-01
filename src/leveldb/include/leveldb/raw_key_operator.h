@@ -12,8 +12,6 @@
 
 namespace leveldb {
 
-bool IsDelMark (TeraKeyType type);
-
 class RawKeyOperator {
 public:
     virtual void EncodeTeraKey(const std::string& row_key,

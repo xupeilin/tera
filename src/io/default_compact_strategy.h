@@ -6,6 +6,7 @@
 #define TERA_IO_DEFAULT_COMPACT_STRATEGY_H_
 
 #include "leveldb/compact_strategy.h"
+#include "leveldb/tera_key.h"
 
 #include "common/mutex.h"
 #include "io/io_utils.h"
@@ -15,6 +16,7 @@ namespace tera {
 namespace io {
 
 using leveldb::Slice;
+using leveldb::TeraKey;
 
 class DefaultCompactStrategy : public leveldb::CompactStrategy {
 public:
@@ -40,38 +42,32 @@ public:
                                 std::string* merged_key);
 
 private:
-    bool InternalDrop(const Slice& k, uint64_t n);
+    bool InternalDrop(uint64_t n);
 
-    bool DropIllegalColumnFamily(const std::string& column_family,
-                                 int32_t* cf_idx = NULL) const;
-    bool DropByLifeTime(int32_t cf_idx, int64_t timestamp) const;
+    bool DropIllegalColumnFamily(int32_t* cf_idx = NULL) const;
+    bool DropByLifeTime(int32_t cf_idx) const;
 
     bool InternalMergeProcess(leveldb::Iterator* it, std::string* merged_value,
                               std::string* merged_key,
                               bool merge_put_flag, bool is_internal_key,
                               int64_t* merged_num);
 
-    bool CheckCompactLowerBound(const Slice& cur_key,
-                                const std::string& lower_bound);
+    bool CheckCompactLowerBound(const std::string& lower_bound);
 
 private:
     std::map<std::string, int32_t> m_cf_indexs;
     TableSchema m_schema;
     const leveldb::RawKeyOperator* m_raw_key_operator;
 
-    std::string m_last_key;
-    std::string m_last_col;
-    std::string m_last_qual;
-    int64_t m_last_ts;
-    leveldb::TeraKeyType m_last_type;
-    leveldb::TeraKeyType m_cur_type;
+    TeraKey m_last_tk;
+    TeraKey m_cur_tk;
+
     int64_t m_del_row_ts;
     int64_t m_del_col_ts;
-    int64_t m_del_qual_ts;
-    int64_t m_cur_ts;
+    int64_t m_del_ts;
     uint64_t m_del_row_seq;
     uint64_t m_del_col_seq;
-    uint64_t m_del_qual_seq;
+    uint64_t m_del_seq;
     uint32_t m_version_num;
     uint64_t m_snapshot;
     bool m_has_put;
