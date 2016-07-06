@@ -2307,6 +2307,44 @@ int32_t RenameOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     return 0;
 }
 
+void ReorderTabletList(std::vector<TabletInfo>* tablets) {
+    if (tablets->size() <= 1) {
+        return;
+    }
+
+    // ordered all tablets by ts
+    std::map<std::string, std::vector<TabletInfo> > tablet_map;
+    size_t max_tablet = 0;
+    for (size_t i = 0; i < tablets->size(); ++i) {
+        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
+        v.push_back(tablets->at(i));
+        if (v.size() > max_tablet) {
+            max_tablet = v.size();
+        }
+    }
+
+    size_t ts_num = tablet_map.size();
+    std::vector<std::vector<TabletInfo> > tablet_vector;
+    tablet_vector.resize(ts_num);
+    std::map<std::string, std::vector<TabletInfo> >::iterator it =
+        tablet_map.begin();
+    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
+        tablet_vector[i].swap(it->second);
+    }
+
+    // recover tablet list
+    std::vector<TabletInfo> tablets_t;
+    for (size_t y = 0; y < max_tablet; y++) {
+        for (size_t x = 0; x < ts_num; x++) {
+            if (y < tablet_vector[x].size()) {
+                tablets_t.push_back(tablet_vector[x][y]);
+            }
+        }
+    }
+    CHECK(tablets_t.size() == tablets->size());
+    tablets->swap(tablets_t);
+}
+
 int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     if (argc != 3) {
         PrintCmdHelpInfo(argv[1]);
@@ -2319,6 +2357,7 @@ int32_t CompactOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
         LOG(ERROR) << "fail to list tablets info: " << tablename;
         return -3;
     }
+    ReorderTabletList(&tablet_list);
 
     int conc = FLAGS_concurrency;
     if (conc <= 0 || conc > 1000) {
@@ -2845,44 +2884,6 @@ int32_t UserOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
     }
     PrintCmdHelpInfo(argv[1]);
     return -1;
-}
-
-void ReorderTabletList(std::vector<TabletInfo>* tablets) {
-    if (tablets->size() <= 1) {
-        return;
-    }
-
-    // ordered all tablets by ts
-    std::map<std::string, std::vector<TabletInfo> > tablet_map;
-    size_t max_tablet = 0;
-    for (size_t i = 0; i < tablets->size(); ++i) {
-        std::vector<TabletInfo>& v = tablet_map[tablets->at(i).server_addr];
-        v.push_back(tablets->at(i));
-        if (v.size() > max_tablet) {
-            max_tablet = v.size();
-        }
-    }
-
-    size_t ts_num = tablet_map.size();
-    std::vector<std::vector<TabletInfo> > tablet_vector;
-    tablet_vector.resize(ts_num);
-    std::map<std::string, std::vector<TabletInfo> >::iterator it =
-        tablet_map.begin();
-    for (size_t i = 0; it != tablet_map.end(); ++it, ++i) {
-        tablet_vector[i].swap(it->second);
-    }
-
-    // recover tablet list
-    std::vector<TabletInfo> tablets_t;
-    for (size_t y = 0; y < max_tablet; y++) {
-        for (size_t x = 0; x < ts_num; x++) {
-            if (y < tablet_vector[x].size()) {
-                tablets_t.push_back(tablet_vector[x][y]);
-            }
-        }
-    }
-    CHECK(tablets_t.size() == tablets->size());
-    tablets->swap(tablets_t);
 }
 
 int32_t RangeOp(Client* client, int32_t argc, char** argv, ErrorCode* err) {
